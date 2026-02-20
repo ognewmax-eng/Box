@@ -88,6 +88,7 @@ app.post('/api/packs', (req, res) => {
         title,
         answerTimeSec: timeSec,
         rounds: rounds.slice(0, 10).map((r) => ({
+          timerStart: (r.timerStart === 'manual' || r.timerStart === 'on_host') ? 'manual' : 'auto',
           questions: (r.questions || []).slice(0, 10).map((q) => {
             const type = q.type === 'open' ? 'open' : 'choice';
             const media = {};
@@ -181,29 +182,39 @@ function loadPackQuestions(data) {
   return result.questions;
 }
 
-// Загрузка пака для игры: вопросы, индексы концов раундов, время на ответ
+// Режим запуска таймера: 'auto' — сразу, 'manual' — по нажатию ведущего
+function getTimerStart(round) {
+  const v = round?.timerStart;
+  return (v === 'manual' || v === 'on_host') ? 'manual' : 'auto';
+}
+
+// Загрузка пака для игры: вопросы, индексы концов раундов, время на ответ, режимы таймера по вопросам
 function loadPackForGame(data) {
   const DEFAULT_TIME = 15;
   const answerTimeSec = Math.min(60, Math.max(10, Number(data.answerTimeSec) || DEFAULT_TIME));
   if (Array.isArray(data.rounds) && data.rounds.length > 0) {
     const questions = [];
+    const timerModes = [];
     const roundEndIndices = [];
     let idx = 0;
     for (const round of data.rounds.slice(0, 10)) {
       const qs = (round.questions || []).slice(0, 10);
+      const timerStart = getTimerStart(round);
       for (const q of qs) {
         questions.push(normalizeQuestion(q));
+        timerModes.push(timerStart);
         idx++;
       }
       if (qs.length > 0) roundEndIndices.push(idx - 1);
     }
-    return { questions, roundEndIndices, answerTimeSec };
+    return { questions, roundEndIndices, answerTimeSec, timerModes };
   }
   if (Array.isArray(data.questions) && data.questions.length > 0) {
     const questions = data.questions.map(normalizeQuestion);
-    return { questions, roundEndIndices: [questions.length - 1], answerTimeSec };
+    const timerModes = questions.map(() => 'auto');
+    return { questions, roundEndIndices: [questions.length - 1], answerTimeSec, timerModes };
   }
-  return { questions: [], roundEndIndices: [], answerTimeSec: DEFAULT_TIME };
+  return { questions: [], roundEndIndices: [], answerTimeSec: DEFAULT_TIME, timerModes: [] };
 }
 
 function resolveMediaUrl(value) {
@@ -372,19 +383,23 @@ io.on('connection', (socket) => {
       }
     }
     if (pack.questions.length === 0) {
-      pack = { ...pack, questions: [normalizeQuestion({ type: 'choice', question: 'Пример вопроса?', options: ['Вариант A', 'Вариант B', 'Вариант C', 'Вариант D'], correctIndex: 0 })], roundEndIndices: [0] };
+      pack = { ...pack, questions: [normalizeQuestion({ type: 'choice', question: 'Пример вопроса?', options: ['Вариант A', 'Вариант B', 'Вариант C', 'Вариант D'], correctIndex: 0 })], roundEndIndices: [0], timerModes: ['auto'] };
     }
 
     room.questions = pack.questions;
     room.roundEndIndices = pack.roundEndIndices || [];
     room.answerTimeSec = pack.answerTimeSec;
+    room.timerModes = pack.timerModes || room.questions.map(() => 'auto');
     room.currentQuestionIndex = 0;
     room.state = GAME_STATES.QUESTION;
     room.answers = new Map();
 
     const q = room.questions[0];
     const timeSec = room.answerTimeSec;
-    room.questionStartTime = Date.now();
+    const timerMode = room.timerModes[0] || 'auto';
+    room.timerStarted = timerMode === 'auto';
+    if (room.timerStarted) room.questionStartTime = Date.now();
+
     io.to(code).emit(SOCKET_EVENTS.GAME_STARTED);
     io.to(code).emit(SOCKET_EVENTS.QUESTION_START, {
       questionIndex: 0,
@@ -393,19 +408,24 @@ io.on('connection', (socket) => {
       question: q.question,
       options: q.type === 'choice' ? q.options : undefined,
       timeSec,
+      timerMode,
       image: resolveMediaUrl(q.image),
       video: resolveMediaUrl(q.video),
       audio: resolveMediaUrl(q.audio),
     });
     socket.emit('question_host', q.type === 'open' ? { correctAnswer: q.correctAnswer } : { correctIndex: q.correctIndex });
 
-    const timer = setTimeout(() => {
-      const r = getRoom(code);
-      if (r?.state === GAME_STATES.QUESTION && r.currentQuestionIndex === 0) {
-        finishQuestion(r, code, 0, q);
-      }
-    }, timeSec * 1000);
-    room.currentTimer = timer;
+    if (timerMode === 'auto') {
+      const timer = setTimeout(() => {
+        const r = getRoom(code);
+        if (r?.state === GAME_STATES.QUESTION && r.currentQuestionIndex === 0) {
+          finishQuestion(r, code, 0, q);
+        }
+      }, timeSec * 1000);
+      room.currentTimer = timer;
+    } else {
+      room.currentTimer = null;
+    }
   });
 
   function finishQuestion(room, code, questionIndex, question) {
@@ -495,7 +515,10 @@ io.on('connection', (socket) => {
     room.answers = new Map();
     const q = room.questions[nextIndex];
     const timeSec = room.answerTimeSec ?? 15;
-    room.questionStartTime = Date.now();
+    const timerMode = (room.timerModes && room.timerModes[nextIndex]) || 'auto';
+    room.timerStarted = timerMode === 'auto';
+    if (room.timerStarted) room.questionStartTime = Date.now();
+
     io.to(code).emit(SOCKET_EVENTS.QUESTION_START, {
       questionIndex: nextIndex,
       total: room.questions.length,
@@ -503,19 +526,45 @@ io.on('connection', (socket) => {
       question: q.question,
       options: q.type === 'choice' ? q.options : undefined,
       timeSec,
+      timerMode,
       image: resolveMediaUrl(q.image),
       video: resolveMediaUrl(q.video),
       audio: resolveMediaUrl(q.audio),
     });
     socket.emit('question_host', q.type === 'open' ? { correctAnswer: q.correctAnswer } : { correctIndex: q.correctIndex });
 
+    if (timerMode === 'auto') {
+      const timer = setTimeout(() => {
+        const r = getRoom(code);
+        if (r?.state === GAME_STATES.QUESTION && r.currentQuestionIndex === nextIndex) {
+          finishQuestion(r, code, nextIndex, q);
+        }
+      }, timeSec * 1000);
+      room.currentTimer = timer;
+    } else {
+      room.currentTimer = null;
+    }
+  });
+
+  socket.on(SOCKET_EVENTS.HOST_START_TIMER, () => {
+    const code = socket.roomCode;
+    const room = getRoom(code);
+    if (!room || room.hostId !== socket.id || room.state !== GAME_STATES.QUESTION) return;
+    if (room.timerStarted) return;
+    const questionIndex = room.currentQuestionIndex;
+    const q = room.questions[questionIndex];
+    if (!q) return;
+    const timeSec = room.answerTimeSec ?? 15;
+    room.timerStarted = true;
+    room.questionStartTime = Date.now();
     const timer = setTimeout(() => {
       const r = getRoom(code);
-      if (r?.state === GAME_STATES.QUESTION && r.currentQuestionIndex === nextIndex) {
-        finishQuestion(r, code, nextIndex, q);
+      if (r?.state === GAME_STATES.QUESTION && r.currentQuestionIndex === questionIndex) {
+        finishQuestion(r, code, questionIndex, q);
       }
     }, timeSec * 1000);
     room.currentTimer = timer;
+    io.to(code).emit(SOCKET_EVENTS.QUESTION_TIMER_STARTED, { timeSec });
   });
 
   socket.on(SOCKET_EVENTS.SHOW_RESULTS, ({ questionIndex, correctIndex, correctAnswer }) => {
@@ -533,6 +582,13 @@ io.on('connection', (socket) => {
       ? { ...q, correctAnswer: typeof correctAnswer === 'string' ? correctAnswer : q.correctAnswer }
       : q;
     finishQuestion(room, code, questionIndex, payload);
+  });
+
+  socket.on(SOCKET_EVENTS.HOST_SHOW_ROUND_LEADERBOARD, () => {
+    const code = socket.roomCode;
+    const room = getRoom(code);
+    if (!room || room.hostId !== socket.id) return;
+    io.to(code).emit(SOCKET_EVENTS.ROUND_LEADERBOARD_SHOWN);
   });
 });
 

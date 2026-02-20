@@ -22,6 +22,9 @@ export default function Host() {
   const [packs, setPacks] = useState([]);
   const [selectedPackId, setSelectedPackId] = useState('');
   const [timeLeft, setTimeLeft] = useState(15);
+  const [timerMode, setTimerMode] = useState('auto'); // 'auto' | 'manual'
+  const [timerStarted, setTimerStarted] = useState(true);
+  const [showRoundLeaderboard, setShowRoundLeaderboard] = useState(false);
   const timeUpSoundRef = useRef({ questionIndex: -1, played: false });
 
   useEffect(() => {
@@ -54,6 +57,10 @@ export default function Host() {
     socket.on(SOCKET_EVENTS.PLAYER_LEFT, ({ players: p }) => setPlayers(p));
     socket.on(SOCKET_EVENTS.GAME_STARTED, () => setPhase('question'));
     socket.on(SOCKET_EVENTS.QUESTION_START, (data) => {
+      setShowRoundLeaderboard(false);
+      const mode = data.timerMode === 'manual' ? 'manual' : 'auto';
+      setTimerMode(mode);
+      setTimerStarted(mode === 'auto');
       setQuestion((prev) => ({
         type: data.type || 'choice',
         question: data.question,
@@ -70,6 +77,10 @@ export default function Host() {
       setTimeLeft(data.timeSec ?? 15);
       setPhase('question');
     });
+    socket.on(SOCKET_EVENTS.QUESTION_TIMER_STARTED, ({ timeSec }) => {
+      setTimerStarted(true);
+      setTimeLeft(timeSec ?? 15);
+    });
     socket.on('question_host', ({ correctIndex, correctAnswer }) => {
       setQuestion((prev) => (prev ? { ...prev, correctIndex: correctIndex ?? prev.correctIndex, correctAnswer: correctAnswer ?? prev.correctAnswer } : null));
     });
@@ -79,7 +90,9 @@ export default function Host() {
     socket.on(SOCKET_EVENTS.RESULTS, (data) => {
       setResults(data);
       setPhase('results');
+      if (data.roundOver) setShowRoundLeaderboard(false);
     });
+    socket.on(SOCKET_EVENTS.ROUND_LEADERBOARD_SHOWN, () => setShowRoundLeaderboard(true));
     socket.on(SOCKET_EVENTS.GAME_OVER, ({ leaderboard: lb }) => {
       setLeaderboard(lb);
       setPhase('gameover');
@@ -100,19 +113,21 @@ export default function Host() {
       socket.off(SOCKET_EVENTS.PLAYER_LEFT);
       socket.off(SOCKET_EVENTS.GAME_STARTED);
       socket.off(SOCKET_EVENTS.QUESTION_START);
+      socket.off(SOCKET_EVENTS.QUESTION_TIMER_STARTED);
       socket.off('question_host');
       socket.off(SOCKET_EVENTS.PLAYER_ANSWERED);
       socket.off(SOCKET_EVENTS.RESULTS);
+      socket.off(SOCKET_EVENTS.ROUND_LEADERBOARD_SHOWN);
       socket.off(SOCKET_EVENTS.GAME_OVER);
       socket.off('disconnect');
     };
   }, [socket]);
 
   useEffect(() => {
-    if (phase !== 'question' || timeLeft <= 0) return;
+    if (phase !== 'question' || !timerStarted || timeLeft <= 0) return;
     const t = setInterval(() => setTimeLeft((l) => l - 1), 1000);
     return () => clearInterval(t);
-  }, [phase, timeLeft]);
+  }, [phase, timerStarted, timeLeft]);
 
   const createRoom = useCallback(() => {
     if (socket) socket.emit(SOCKET_EVENTS.CREATE_ROOM, { joinBaseUrl: window.location.origin });
@@ -134,6 +149,15 @@ export default function Host() {
 
   const nextQuestion = useCallback(() => {
     if (socket) socket.emit(SOCKET_EVENTS.NEXT_QUESTION);
+  }, [socket]);
+
+  const startTimer = useCallback(() => {
+    if (socket) socket.emit(SOCKET_EVENTS.HOST_START_TIMER);
+  }, [socket]);
+
+  const showRoundLeaderboardClick = useCallback(() => {
+    setShowRoundLeaderboard(true);
+    if (socket) socket.emit(SOCKET_EVENTS.HOST_SHOW_ROUND_LEADERBOARD);
   }, [socket]);
 
   if (!socket) {
@@ -238,11 +262,21 @@ export default function Host() {
               <span className="text-slate-400">
                 Вопрос {questionIndex + 1} из {totalQuestions}
               </span>
-              <span
-                className={`text-2xl font-mono font-bold ${timeLeft <= 5 ? 'text-party-pink animate-pulse' : 'text-party-cyan'}`}
-              >
-                {timeLeft} сек
-              </span>
+              {timerMode === 'manual' && !timerStarted ? (
+                <motion.button
+                  onClick={startTimer}
+                  className="px-6 py-3 rounded-2xl bg-party-cyan hover:bg-party-neon text-party-dark font-bold text-lg"
+                  whileTap={{ scale: 0.98 }}
+                >
+                  Старт таймера
+                </motion.button>
+              ) : (
+                <span
+                  className={`text-2xl font-mono font-bold ${timeLeft <= 5 ? 'text-party-pink animate-pulse' : 'text-party-cyan'}`}
+                >
+                  {timeLeft} сек
+                </span>
+              )}
             </div>
             <h2 className="text-3xl md:text-5xl font-bold text-white mb-12 leading-tight">
               {question.question}
@@ -307,37 +341,83 @@ export default function Host() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            {results.roundOver && (
-              <h2 className="text-3xl font-bold text-party-pink mb-2">Итоги раунда {results.roundNumber ?? 1}</h2>
+            {results.roundOver ? (
+              showRoundLeaderboard ? (
+                <>
+                  <h2 className="text-3xl font-bold text-party-pink mb-2">Итоги раунда {results.roundNumber ?? 1}</h2>
+                  <h3 className="text-2xl font-bold text-party-neon mb-6">Таблица лидеров</h3>
+                  <ul className="space-y-3 mb-10">
+                    {(results.roundLeaderboard || results.playerScores || Object.entries(results.scores || {}).map(([id, score]) => ({ nickname: id, score }))).map((item, i) => (
+                      <motion.li
+                        key={item.nickname}
+                        className="flex justify-between items-center rounded-2xl bg-slate-800/60 px-6 py-4 text-xl border border-slate-600/50"
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.05 }}
+                      >
+                        <span className="text-party-neon font-bold">#{i + 1}</span>
+                        <span className="text-white">{item.nickname}</span>
+                        <span className="text-party-cyan font-bold">{item.score}</span>
+                      </motion.li>
+                    ))}
+                  </ul>
+                  <motion.button
+                    onClick={nextQuestion}
+                    className="px-10 py-4 rounded-2xl bg-party-purple hover:bg-party-neon text-xl font-bold"
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    Следующий раунд
+                  </motion.button>
+                </>
+              ) : (
+                <>
+                  <h2 className="text-3xl font-bold text-party-neon mb-6">Правильный ответ</h2>
+                  {results.type === 'open' ? (
+                    <p className="text-2xl text-white mb-8">{results.correctAnswer ?? ''}</p>
+                  ) : question && question.options && results.correctIndex != null && (
+                    <p className="text-2xl text-white mb-8">
+                      {LETTERS[results.correctIndex]}. {question.options[results.correctIndex]}
+                    </p>
+                  )}
+                  <motion.button
+                    onClick={showRoundLeaderboardClick}
+                    className="px-10 py-4 rounded-2xl bg-party-pink hover:bg-pink-400 text-xl font-bold"
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    Показать таблицу лидеров
+                  </motion.button>
+                </>
+              )
+            ) : (
+              <>
+                <h2 className="text-3xl font-bold text-party-neon mb-6">Правильный ответ</h2>
+                {results.type === 'open' ? (
+                  <p className="text-2xl text-white mb-6">{results.correctAnswer ?? ''}</p>
+                ) : question && question.options && results.correctIndex != null && (
+                  <p className="text-2xl text-white mb-6">
+                    {LETTERS[results.correctIndex]}. {question.options[results.correctIndex]}
+                  </p>
+                )}
+                <div className="bg-slate-800/50 rounded-2xl p-6 mb-8">
+                  <p className="text-slate-400 mb-4">Очки после этого вопроса</p>
+                  <ul className="space-y-2">
+                    {(results.playerScores || Object.entries(results.scores || {}).map(([id, score]) => ({ nickname: id, score }))).map((item) => (
+                      <li key={item.nickname} className="flex justify-between text-lg">
+                        <span className="text-slate-300">{item.nickname}</span>
+                        <span className="text-party-cyan font-bold">{item.score}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <motion.button
+                  onClick={nextQuestion}
+                  className="px-10 py-4 rounded-2xl bg-party-purple hover:bg-party-neon text-xl font-bold"
+                  whileTap={{ scale: 0.98 }}
+                >
+                  Следующий вопрос
+                </motion.button>
+              </>
             )}
-            <h2 className="text-3xl font-bold text-party-neon mb-6">Правильный ответ</h2>
-            {results.type === 'open' ? (
-              <p className="text-2xl text-white mb-4">{results.correctAnswer ?? ''}</p>
-            ) : question && question.options && results.correctIndex != null && (
-              <p className="text-2xl text-white mb-4">
-                {LETTERS[results.correctIndex]}. {question.options[results.correctIndex]}
-              </p>
-            )}
-            <div className="bg-slate-800/50 rounded-2xl p-6 mb-8">
-              <p className="text-slate-400 mb-4">
-                {results.roundOver ? 'Таблица лидеров после раунда' : 'Очки после этого вопроса'}
-              </p>
-              <ul className="space-y-2">
-                {(results.roundLeaderboard || results.playerScores || Object.entries(results.scores || {}).map(([id, score]) => ({ nickname: id, score }))).map((item) => (
-                  <li key={item.nickname} className="flex justify-between text-lg">
-                    <span className="text-slate-300">{item.nickname}</span>
-                    <span className="text-party-cyan font-bold">{item.score}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <motion.button
-              onClick={nextQuestion}
-              className="px-10 py-4 rounded-2xl bg-party-purple hover:bg-party-neon text-xl font-bold"
-              whileTap={{ scale: 0.98 }}
-            >
-              {results.roundOver ? 'Следующий раунд' : 'Следующий вопрос'}
-            </motion.button>
           </motion.div>
         )}
 

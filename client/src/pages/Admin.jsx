@@ -19,7 +19,7 @@ const emptyQuestion = (type = 'choice') => ({
 export default function Admin() {
   const [packs, setPacks] = useState([]);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({ id: '', title: '', answerTimeSec: 15, rounds: [{ questions: [emptyQuestion()] }] });
+  const [form, setForm] = useState({ id: '', title: '', answerTimeSec: 15, rounds: [{ questions: [emptyQuestion()], timerStart: 'auto' }] });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -34,7 +34,14 @@ export default function Admin() {
 
   const addRound = () => {
     if (form.rounds.length >= MAX_ROUNDS) return;
-    setForm((f) => ({ ...f, rounds: [...f.rounds, { questions: [emptyQuestion()] }] }));
+    setForm((f) => ({ ...f, rounds: [...f.rounds, { questions: [emptyQuestion()], timerStart: 'auto' }] }));
+  };
+
+  const updateRound = (roundIndex, field, value) => {
+    setForm((f) => ({
+      ...f,
+      rounds: f.rounds.map((r, i) => (i !== roundIndex ? r : { ...r, [field]: value })),
+    }));
   };
 
   const addQuestion = (roundIndex) => {
@@ -128,6 +135,7 @@ export default function Admin() {
     const id = form.id.trim().toLowerCase().replace(/\s+/g, '-');
     const rounds = form.rounds
       .map((r) => ({
+        timerStart: (r.timerStart === 'manual' || r.timerStart === 'on_host') ? 'manual' : 'auto',
         questions: r.questions
           .filter((q) => q.question.trim())
           .map((q) => {
@@ -170,7 +178,7 @@ export default function Admin() {
       }
       if (data.error) throw new Error(data.error);
       setMessage('Пак сохранён!');
-      setForm({ id: '', title: '', answerTimeSec: 15, rounds: [{ questions: [emptyQuestion()] }] });
+      setForm({ id: '', title: '', answerTimeSec: 15, rounds: [{ questions: [emptyQuestion()], timerStart: 'auto' }] });
       setEditing(null);
       loadPacks();
     } catch (err) {
@@ -195,6 +203,7 @@ export default function Admin() {
         let rounds = [];
         if (Array.isArray(data.rounds) && data.rounds.length > 0) {
           rounds = data.rounds.map((r) => ({
+            timerStart: (r.timerStart === 'manual' || r.timerStart === 'on_host') ? 'manual' : 'auto',
             questions: (r.questions || []).map((q) => ({
               type: q.type === 'open' ? 'open' : 'choice',
               question: q.question || '',
@@ -208,6 +217,7 @@ export default function Admin() {
           }));
         } else if (Array.isArray(data.questions) && data.questions.length > 0) {
           rounds = [{
+            timerStart: 'auto',
             questions: data.questions.map((q) => ({
               type: q.type === 'open' ? 'open' : 'choice',
               question: q.question || '',
@@ -220,7 +230,7 @@ export default function Admin() {
             })),
           }];
         }
-        if (rounds.length === 0) rounds = [{ questions: [emptyQuestion()] }];
+        if (rounds.length === 0) rounds = [{ questions: [emptyQuestion()], timerStart: 'auto' }];
         const answerTimeSec = Math.min(60, Math.max(10, Number(data.answerTimeSec) || 15));
         setForm({ id: data.id, title: data.title || '', answerTimeSec, rounds });
         setEditing(pack.id);
@@ -290,9 +300,16 @@ export default function Admin() {
               <div className="space-y-8 max-h-[55vh] overflow-y-auto pr-2">
                 {form.rounds.map((round, ri) => (
                   <div key={ri} className="rounded-2xl bg-slate-800/50 p-4 border border-slate-600">
-                    <div className="flex justify-between items-center mb-3">
+                    <div className="flex flex-wrap justify-between items-center gap-2 mb-3">
                       <span className="text-party-neon font-medium">Раунд {ri + 1}</span>
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <label className="text-slate-400 text-sm flex items-center gap-1">
+                          Таймер:
+                          <select value={round.timerStart ?? 'auto'} onChange={(e) => updateRound(ri, 'timerStart', e.target.value)} className="rounded-lg bg-slate-800 border border-slate-600 px-2 py-1 text-white text-sm">
+                            <option value="auto">сразу</option>
+                            <option value="manual">по нажатию ведущего</option>
+                          </select>
+                        </label>
                         <button type="button" onClick={() => addQuestion(ri)} disabled={round.questions.length >= MAX_QUESTIONS_PER_ROUND} className="text-slate-400 hover:text-party-cyan text-sm disabled:opacity-50">+ Вопрос</button>
                         {form.rounds.length > 1 && <button type="button" onClick={() => removeRound(ri)} className="text-slate-500 hover:text-party-pink text-sm">Удалить раунд</button>}
                       </div>
@@ -355,7 +372,7 @@ export default function Admin() {
             <div className="flex gap-4">
               <motion.button type="submit" disabled={saving} className="px-8 py-4 rounded-2xl bg-party-purple hover:bg-party-neon disabled:opacity-50 font-bold" whileTap={{ scale: 0.98 }}>{saving ? 'Сохранение…' : 'Сохранить пак'}</motion.button>
               {editing && (
-                <motion.button type="button" onClick={() => { setEditing(null); setForm({ id: '', title: '', answerTimeSec: 15, rounds: [{ questions: [emptyQuestion()] }] }); setMessage(''); }} className="px-8 py-4 rounded-2xl bg-slate-600 hover:bg-slate-500 font-bold" whileTap={{ scale: 0.98 }}>Отмена</motion.button>
+                <motion.button type="button" onClick={() => { setEditing(null); setForm({ id: '', title: '', answerTimeSec: 15, rounds: [{ questions: [emptyQuestion()], timerStart: 'auto' }] }); setMessage(''); }} className="px-8 py-4 rounded-2xl bg-slate-600 hover:bg-slate-500 font-bold" whileTap={{ scale: 0.98 }}>Отмена</motion.button>
               )}
             </div>
           </form>

@@ -23,6 +23,9 @@ export default function Client() {
   const [results, setResults] = useState(null);
   const [leaderboard, setLeaderboard] = useState([]);
   const [timeLeft, setTimeLeft] = useState(15);
+  const [timerMode, setTimerMode] = useState('auto');
+  const [timerStarted, setTimerStarted] = useState(true);
+  const [showRoundLeaderboard, setShowRoundLeaderboard] = useState(false);
   const timeUpSoundRef = useRef({ questionIndex: -1, played: false });
 
   useEffect(() => {
@@ -48,6 +51,10 @@ export default function Client() {
       setSelectedAnswer(null);
     });
     socket.on(SOCKET_EVENTS.QUESTION_START, (data) => {
+      setShowRoundLeaderboard(false);
+      const mode = data.timerMode === 'manual' ? 'manual' : 'auto';
+      setTimerMode(mode);
+      setTimerStarted(mode === 'auto');
       setQuestion({
         type: data.type || 'choice',
         question: data.question,
@@ -63,10 +70,16 @@ export default function Client() {
       setTimeLeft(data.timeSec ?? 15);
       setScreen('question');
     });
+    socket.on(SOCKET_EVENTS.QUESTION_TIMER_STARTED, ({ timeSec }) => {
+      setTimerStarted(true);
+      setTimeLeft(timeSec ?? 15);
+    });
     socket.on(SOCKET_EVENTS.RESULTS, (data) => {
       setResults(data);
       setScreen('results');
+      if (data.roundOver) setShowRoundLeaderboard(false);
     });
+    socket.on(SOCKET_EVENTS.ROUND_LEADERBOARD_SHOWN, () => setShowRoundLeaderboard(true));
     socket.on(SOCKET_EVENTS.GAME_OVER, ({ leaderboard: lb }) => {
       setLeaderboard(lb);
       setScreen('gameover');
@@ -80,17 +93,19 @@ export default function Client() {
       socket.off(SOCKET_EVENTS.JOIN_ERROR);
       socket.off(SOCKET_EVENTS.GAME_STARTED);
       socket.off(SOCKET_EVENTS.QUESTION_START);
+      socket.off(SOCKET_EVENTS.QUESTION_TIMER_STARTED);
       socket.off(SOCKET_EVENTS.RESULTS);
+      socket.off(SOCKET_EVENTS.ROUND_LEADERBOARD_SHOWN);
       socket.off(SOCKET_EVENTS.GAME_OVER);
       socket.off(SOCKET_EVENTS.HOST_DISCONNECT);
     };
   }, [socket]);
 
   useEffect(() => {
-    if (screen !== 'question' || timeLeft <= 0) return;
+    if (screen !== 'question' || !timerStarted || timeLeft <= 0) return;
     const t = setInterval(() => setTimeLeft((l) => l - 1), 1000);
     return () => clearInterval(t);
-  }, [screen, timeLeft]);
+  }, [screen, timerStarted, timeLeft]);
 
   const joinRoom = useCallback(
     (e) => {
@@ -234,9 +249,13 @@ export default function Client() {
               <span className="text-slate-400">
                 {questionIndex + 1} / {totalQuestions}
               </span>
-              <span className={`font-mono font-bold ${timeLeft <= 5 ? 'text-party-pink' : 'text-party-cyan'}`}>
-                {timeLeft}
-              </span>
+              {timerMode === 'manual' && !timerStarted ? (
+                <span className="text-slate-400 text-sm">Ожидайте старта таймера</span>
+              ) : (
+                <span className={`font-mono font-bold ${timeLeft <= 5 ? 'text-party-pink' : 'text-party-cyan'}`}>
+                  {timeLeft}
+                </span>
+              )}
             </div>
             <h2 className="text-xl font-bold text-white mb-6 leading-snug">{question.question}</h2>
             {(question.image || question.video || question.audio) && (
@@ -316,27 +335,59 @@ export default function Client() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            {results?.roundOver && (
-              <h2 className="text-2xl font-bold text-party-pink mb-2">Итоги раунда {results.roundNumber ?? 1}</h2>
+            {results?.roundOver ? (
+              showRoundLeaderboard ? (
+                <>
+                  <h2 className="text-2xl font-bold text-party-pink mb-2">Итоги раунда {results.roundNumber ?? 1}</h2>
+                  <h3 className="text-xl font-bold text-party-neon mb-4">Таблица лидеров</h3>
+                  <ul className="space-y-3 mb-8">
+                    {(results?.roundLeaderboard || results?.playerScores || []).map((entry, i) => (
+                      <motion.li
+                        key={entry.nickname ? `${entry.nickname}-${i}` : i}
+                        className="flex justify-between items-center rounded-2xl bg-slate-800/60 px-4 py-4 border border-slate-600/50"
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.05 }}
+                      >
+                        <span className="text-party-neon font-bold">#{i + 1}</span>
+                        <span className="text-white">{entry.nickname}</span>
+                        <span className="text-party-cyan font-bold">{entry.score}</span>
+                      </motion.li>
+                    ))}
+                  </ul>
+                  <p className="text-slate-400 text-center">
+                    Следующий раунд скоро…
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h2 className="text-2xl font-bold text-party-neon mb-4">Правильный ответ</h2>
+                  <p className="text-slate-400 text-center mb-6">Показан на экране ведущего</p>
+                  <p className="text-slate-500 text-center">
+                    Ожидайте таблицу лидеров…
+                  </p>
+                </>
+              )
+            ) : (
+              <>
+                <h2 className="text-2xl font-bold text-party-neon mb-6">Результаты</h2>
+                <ul className="space-y-3 mb-6">
+                  {(results?.playerScores || []).map((entry, i) => (
+                    <li
+                      key={entry.nickname ? `${entry.nickname}-${i}` : i}
+                      className="flex justify-between items-center rounded-2xl bg-slate-800/60 px-4 py-3"
+                    >
+                      <span className="text-party-neon font-bold">#{i + 1}</span>
+                      <span className="text-white">{entry.nickname}</span>
+                      <span className="text-party-cyan font-bold">{entry.score}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-slate-400 text-center">
+                  Следующий вопрос скоро…
+                </p>
+              </>
             )}
-            <h2 className="text-2xl font-bold text-party-neon mb-6">
-              {results?.roundOver ? 'Таблица лидеров' : 'Результаты'}
-            </h2>
-            <ul className="space-y-3">
-              {(results?.roundLeaderboard || results?.playerScores || []).map((entry, i) => (
-                <li
-                  key={entry.nickname ? `${entry.nickname}-${i}` : i}
-                  className="flex justify-between items-center rounded-2xl bg-slate-800/60 px-4 py-3"
-                >
-                  <span className="text-party-neon font-bold">#{i + 1}</span>
-                  <span className="text-white">{entry.nickname}</span>
-                  <span className="text-party-cyan font-bold">{entry.score}</span>
-                </li>
-              ))}
-            </ul>
-            <p className="text-slate-400 text-center mt-8">
-              {results?.roundOver ? 'Следующий раунд скоро…' : 'Следующий вопрос скоро…'}
-            </p>
           </motion.div>
         )}
 

@@ -27,11 +27,15 @@ export const SOCKET_EVENTS = {
   GAME_STARTED: 'game_started',
   NEXT_QUESTION: 'next_question',
   QUESTION_START: 'question_start',
+  HOST_START_TIMER: 'host_start_timer',
+  QUESTION_TIMER_STARTED: 'question_timer_started',
   SUBMIT_ANSWER: 'submit_answer',
   PLAYER_ANSWERED: 'player_answered',
   SHOW_RESULTS: 'show_results',
   RESULTS: 'results',
   GAME_OVER: 'game_over',
+  HOST_SHOW_ROUND_LEADERBOARD: 'host_show_round_leaderboard',
+  ROUND_LEADERBOARD_SHOWN: 'round_leaderboard_shown',
 
   // Синхронизация
   ROOM_STATE: 'room_state',
