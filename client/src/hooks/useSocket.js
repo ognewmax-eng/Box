@@ -15,8 +15,14 @@ export function useSocket() {
     const s = io(getSocketUrl(), { transports: ['websocket', 'polling'] });
     s.on('connect', () => setConnected(true));
     s.on('disconnect', () => setConnected(false));
+    s.on('connect_error', () => setConnected(false));
     setSocket(s);
-    return () => s.disconnect();
+    return () => {
+      s.off('connect');
+      s.off('disconnect');
+      s.off('connect_error');
+      s.disconnect();
+    };
   }, []);
 
   return { socket, connected };

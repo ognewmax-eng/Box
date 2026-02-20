@@ -82,6 +82,15 @@ export default function Host() {
       setPhase('gameover');
     });
     socket.on(SOCKET_EVENTS.HOST_DISCONNECT, () => {});
+    socket.on('disconnect', () => {
+      setPhase((p) => (p !== 'create' ? 'create' : p));
+      setRoomCode('');
+      setJoinUrl('');
+      setPlayers([]);
+      setQuestion(null);
+      setResults(null);
+      setLeaderboard([]);
+    });
     return () => {
       socket.off(SOCKET_EVENTS.ROOM_CREATED);
       socket.off(SOCKET_EVENTS.PLAYER_JOINED);
@@ -92,6 +101,7 @@ export default function Host() {
       socket.off(SOCKET_EVENTS.PLAYER_ANSWERED);
       socket.off(SOCKET_EVENTS.RESULTS);
       socket.off(SOCKET_EVENTS.GAME_OVER);
+      socket.off('disconnect');
     };
   }, [socket]);
 
@@ -330,7 +340,7 @@ export default function Host() {
             <ul className="space-y-4 mb-10">
               {leaderboard.map((entry, i) => (
                 <motion.li
-                  key={entry.nickname}
+                  key={entry.nickname ? `${entry.nickname}-${i}` : i}
                   className="flex justify-between items-center rounded-2xl bg-slate-800/60 px-6 py-4 text-xl"
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}

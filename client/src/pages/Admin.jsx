@@ -157,9 +157,17 @@ export default function Admin() {
   };
 
   const startEdit = (pack) => {
-    fetch(`/api/packs/${pack.id}`)
-      .then((r) => r.json())
+    const id = encodeURIComponent(pack.id);
+    fetch(`/api/packs/${id}`)
+      .then((r) => {
+        if (!r.ok) {
+          setMessage(r.status === 404 ? 'Пак не найден' : 'Не удалось загрузить пак');
+          return null;
+        }
+        return r.json();
+      })
       .then((data) => {
+        if (!data) return;
         let rounds = [];
         if (Array.isArray(data.rounds) && data.rounds.length > 0) {
           rounds = data.rounds.map((r) => ({

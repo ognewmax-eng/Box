@@ -305,7 +305,7 @@ export default function Client() {
             <ul className="space-y-3">
               {(results?.roundLeaderboard || results?.playerScores || []).map((entry, i) => (
                 <li
-                  key={entry.nickname}
+                  key={entry.nickname ? `${entry.nickname}-${i}` : i}
                   className="flex justify-between items-center rounded-2xl bg-slate-800/60 px-4 py-3"
                 >
                   <span className="text-party-neon font-bold">#{i + 1}</span>
@@ -334,7 +334,7 @@ export default function Client() {
             <ul className="space-y-3 mb-10">
               {leaderboard.map((entry, i) => (
                 <motion.li
-                  key={entry.nickname}
+                  key={entry.nickname ? `${entry.nickname}-${i}` : i}
                   className="flex justify-between items-center rounded-2xl bg-slate-800/60 px-4 py-4 text-lg"
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}

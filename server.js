@@ -33,25 +33,38 @@ app.get('/api/health', (req, res) => {
 app.get('/api/packs', (req, res) => {
   try {
     const files = fs.readdirSync(GAMES_DIR).filter((f) => f.endsWith('.json'));
-    const packs = files.map((f) => {
-      const path = join(GAMES_DIR, f);
-      const data = JSON.parse(fs.readFileSync(path, 'utf-8'));
-      const questions = loadPackQuestions(data);
-      return { id: f.replace('.json', ''), ...data, questionsCount: questions.length };
-    });
+    const packs = [];
+    for (const f of files) {
+      try {
+        const path = join(GAMES_DIR, f);
+        const data = JSON.parse(fs.readFileSync(path, 'utf-8'));
+        const questions = loadPackQuestions(data);
+        packs.push({ id: f.replace(/\.json$/i, ''), ...data, questionsCount: questions.length });
+      } catch (err) {
+        console.error('Пак не загружен:', f, err.message);
+      }
+    }
     res.json(packs);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
+// Безопасный id пака: только латиница, цифры, дефис, подчёркивание (защита от path traversal)
+function sanitizePackId(id) {
+  if (id == null || typeof id !== 'string') return '';
+  return id.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || '';
+}
+
 // API: один пак по id
 app.get('/api/packs/:id', (req, res) => {
   try {
-    const path = join(GAMES_DIR, `${req.params.id}.json`);
+    const id = sanitizePackId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Некорректный id пака' });
+    const path = join(GAMES_DIR, `${id}.json`);
     if (!fs.existsSync(path)) return res.status(404).json({ error: 'Пак не найден' });
     const data = JSON.parse(fs.readFileSync(path, 'utf-8'));
-    res.json({ id: req.params.id, ...data });
+    res.json({ id, ...data });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -62,7 +75,9 @@ app.post('/api/packs', (req, res) => {
   try {
     const { id, title, rounds, questions, answerTimeSec } = req.body;
     if (!id || !title) return res.status(400).json({ error: 'Нужны id и title' });
-    const path = join(GAMES_DIR, `${id}.json`);
+    const safeId = sanitizePackId(id);
+    if (!safeId) return res.status(400).json({ error: 'ID пака: только латиница, цифры, дефис и подчёркивание' });
+    const path = join(GAMES_DIR, `${safeId}.json`);
     let payload;
     if (Array.isArray(rounds) && rounds.length > 0) {
       const timeSec = Math.min(60, Math.max(10, Number(answerTimeSec) || 15));
@@ -91,7 +106,7 @@ app.post('/api/packs', (req, res) => {
     }
     fs.writeFileSync(path, JSON.stringify(payload, null, 2), 'utf-8');
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.json({ ok: true, id });
+    res.json({ ok: true, id: safeId });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -172,7 +187,8 @@ function generateRoomCode() {
 const rooms = new Map(); // code -> room state
 
 function getRoom(code) {
-  return rooms.get(code?.toUpperCase());
+  if (code == null || typeof code !== 'string') return undefined;
+  return rooms.get(code.toUpperCase());
 }
 
 function setRoom(code, state) {
@@ -181,6 +197,17 @@ function setRoom(code, state) {
 
 io.on('connection', (socket) => {
   socket.on(SOCKET_EVENTS.CREATE_ROOM, ({ packId, joinBaseUrl }) => {
+    // Если ведущий уже создал комнату — удаляем старую (избегаем «призрачных» комнат)
+    const oldCode = socket.roomCode;
+    if (oldCode && socket.role === 'host') {
+      const oldRoom = getRoom(oldCode);
+      if (oldRoom?.currentTimer) {
+        clearTimeout(oldRoom.currentTimer);
+        oldRoom.currentTimer = null;
+      }
+      rooms.delete(oldCode);
+    }
+
     let code;
     do {
       code = generateRoomCode();
@@ -222,11 +249,16 @@ io.on('connection', (socket) => {
       return;
     }
     const names = [...room.players.values()].map((p) => p.nickname.toLowerCase());
-    if (names.includes((nickname || '').trim().toLowerCase())) {
+    const rawName = (nickname || 'Игрок').trim().slice(0, 30);
+    if (!rawName) {
+      socket.emit(SOCKET_EVENTS.JOIN_ERROR, { message: 'Введите имя' });
+      return;
+    }
+    if (names.includes(rawName.toLowerCase())) {
       socket.emit(SOCKET_EVENTS.JOIN_ERROR, { message: 'Такое имя уже занято' });
       return;
     }
-    const player = { id: socket.id, nickname: (nickname || 'Игрок').trim() };
+    const player = { id: socket.id, nickname: rawName };
     room.players.set(socket.id, player);
     socket.join(c);
     socket.roomCode = c;
@@ -245,6 +277,10 @@ io.on('connection', (socket) => {
     if (!room) return;
 
     if (socket.role === 'host') {
+      if (room.currentTimer) {
+        clearTimeout(room.currentTimer);
+        room.currentTimer = null;
+      }
       io.to(code).emit(SOCKET_EVENTS.HOST_DISCONNECT);
       rooms.delete(code);
       return;
@@ -356,12 +392,16 @@ io.on('connection', (socket) => {
     const player = room.players.get(socket.id);
     if (!player || room.answers.has(socket.id)) return;
     const q = room.questions[room.currentQuestionIndex];
+    if (!q) return;
     if (q.type === 'open') {
       const text = typeof answerText === 'string' ? answerText.trim() : '';
       room.answers.set(socket.id, text);
       io.to(code).emit(SOCKET_EVENTS.PLAYER_ANSWERED, { playerId: socket.id, nickname: player.nickname, answerText: text });
     } else {
-      room.answers.set(socket.id, answerIndex);
+      const opts = q.options || [];
+      const idx = Number(answerIndex);
+      if (!Number.isInteger(idx) || idx < 0 || idx >= opts.length) return;
+      room.answers.set(socket.id, idx);
       io.to(code).emit(SOCKET_EVENTS.PLAYER_ANSWERED, { playerId: socket.id, nickname: player.nickname });
     }
   });
@@ -414,6 +454,11 @@ io.on('connection', (socket) => {
     if (!room || room.hostId !== socket.id) return;
     const q = room.questions[questionIndex];
     if (!q) return;
+    // Останавливаем таймер, чтобы не отправить RESULTS дважды (по кнопке и по таймауту)
+    if (room.currentTimer) {
+      clearTimeout(room.currentTimer);
+      room.currentTimer = null;
+    }
     const payload = q.type === 'open'
       ? { ...q, correctAnswer: typeof correctAnswer === 'string' ? correctAnswer : q.correctAnswer }
       : q;
