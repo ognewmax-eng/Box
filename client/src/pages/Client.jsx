@@ -48,7 +48,14 @@ export default function Client() {
       setSelectedAnswer(null);
     });
     socket.on(SOCKET_EVENTS.QUESTION_START, (data) => {
-      setQuestion({ type: data.type || 'choice', question: data.question, options: data.options || [] });
+      setQuestion({
+        type: data.type || 'choice',
+        question: data.question,
+        options: data.options || [],
+        image: data.image,
+        video: data.video,
+        audio: data.audio,
+      });
       setQuestionIndex(data.questionIndex);
       setTotalQuestions(data.total);
       setSelectedAnswer(null);
@@ -232,6 +239,19 @@ export default function Client() {
               </span>
             </div>
             <h2 className="text-xl font-bold text-white mb-6 leading-snug">{question.question}</h2>
+            {(question.image || question.video || question.audio) && (
+              <div className="flex flex-col gap-3 mb-6">
+                {question.image && (
+                  <img src={question.image} alt="" className="max-h-48 w-full rounded-xl border border-slate-600 object-contain bg-slate-800/50" />
+                )}
+                {question.video && (
+                  <video src={question.video} controls className="max-h-48 w-full rounded-xl border border-slate-600 bg-black" />
+                )}
+                {question.audio && (
+                  <audio src={question.audio} controls className="w-full" />
+                )}
+              </div>
+            )}
             {question.type === 'open' ? (
               <form onSubmit={submitOpenAnswer} className="space-y-4">
                 <input

@@ -11,6 +11,9 @@ const emptyQuestion = (type = 'choice') => ({
   options: type === 'choice' ? ['', '', '', ''] : undefined,
   correctIndex: type === 'choice' ? 0 : undefined,
   correctAnswer: type === 'open' ? '' : undefined,
+  image: '',
+  video: '',
+  audio: '',
 });
 
 export default function Admin() {
@@ -76,8 +79,9 @@ export default function Admin() {
               questions: r.questions.map((q, qi) => {
                 if (qi !== questionIndex) return q;
                 const text = q.question || '';
-                if (type === 'open') return { type: 'open', question: text, correctAnswer: '' };
-                return { type: 'choice', question: text, options: ['', '', '', ''], correctIndex: 0 };
+                const media = { image: q.image ?? '', video: q.video ?? '', audio: q.audio ?? '' };
+                if (type === 'open') return { type: 'open', question: text, correctAnswer: '', ...media };
+                return { type: 'choice', question: text, options: ['', '', '', ''], correctIndex: 0, ...media };
               }),
             }
       ),
@@ -100,6 +104,21 @@ export default function Admin() {
     setForm((f) => ({ ...f, rounds: f.rounds.filter((_, i) => i !== roundIndex) }));
   };
 
+  const uploadMedia = (roundIndex, questionIndex, field, e) => {
+    const file = e.target?.files?.[0];
+    if (!file || !form.id?.trim()) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    fetch(`/api/packs/${encodeURIComponent(form.id.trim())}/media`, { method: 'POST', body: fd })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.path) updateQuestion(roundIndex, questionIndex, field, data.path);
+        if (data.error) setMessage(data.error);
+      })
+      .catch(() => setMessage('Ошибка загрузки'));
+    e.target.value = '';
+  };
+
   const savePack = async (e) => {
     e?.preventDefault();
     if (!form.id.trim() || !form.title.trim()) {
@@ -112,8 +131,12 @@ export default function Admin() {
         questions: r.questions
           .filter((q) => q.question.trim())
           .map((q) => {
+            const media = {};
+            if (q.image?.trim()) media.image = q.image.trim();
+            if (q.video?.trim()) media.video = q.video.trim();
+            if (q.audio?.trim()) media.audio = q.audio.trim();
             if (q.type === 'open') {
-              return { type: 'open', question: q.question.trim(), correctAnswer: (q.correctAnswer || '').trim() };
+              return { type: 'open', question: q.question.trim(), correctAnswer: (q.correctAnswer || '').trim(), ...media };
             }
             const options = (q.options || []).map((o) => o.trim()).filter(Boolean);
             return {
@@ -121,6 +144,7 @@ export default function Admin() {
               question: q.question.trim(),
               options: options.length ? options : ['A', 'B', 'C', 'D'],
               correctIndex: Math.max(0, Math.min(Number(q.correctIndex) || 0, options.length - 1)),
+              ...media,
             };
           }),
       }))
@@ -177,6 +201,9 @@ export default function Admin() {
               options: (q.options && [...q.options, '', '', ''].slice(0, 4)) || ['', '', '', ''],
               correctIndex: q.correctIndex ?? 0,
               correctAnswer: q.correctAnswer ?? '',
+              image: q.image ?? '',
+              video: q.video ?? '',
+              audio: q.audio ?? '',
             })),
           }));
         } else if (Array.isArray(data.questions) && data.questions.length > 0) {
@@ -187,6 +214,9 @@ export default function Admin() {
               options: (q.options && [...q.options, '', '', ''].slice(0, 4)) || ['', '', '', ''],
               correctIndex: q.correctIndex ?? 0,
               correctAnswer: q.correctAnswer ?? '',
+              image: q.image ?? '',
+              video: q.video ?? '',
+              audio: q.audio ?? '',
             })),
           }];
         }
@@ -280,6 +310,26 @@ export default function Admin() {
                           </div>
                         </div>
                         <input type="text" value={q.question} onChange={(e) => updateQuestion(ri, qi, 'question', e.target.value)} placeholder="Текст вопроса?" className="w-full rounded-lg bg-slate-800 border border-slate-600 px-3 py-2 text-white text-sm mb-2 focus:border-party-purple outline-none" />
+                        <div className="mb-3 rounded-lg bg-slate-800/70 p-3 border border-party-purple/30">
+                          <p className="text-party-cyan font-medium text-sm mb-2">Медиа (фото, видео, аудио)</p>
+                          <p className="text-slate-400 text-xs mb-2">URL или загрузите файл после сохранения пака</p>
+                          {['image', 'video', 'audio'].map((mediaType) => (
+                            <div key={mediaType} className="flex flex-wrap items-center gap-2 mb-2">
+                              <span className="text-party-cyan text-xs w-12 shrink-0">{mediaType === 'image' ? 'Фото' : mediaType === 'video' ? 'Видео' : 'Аудио'}:</span>
+                              <input type="text" value={q[mediaType] ?? ''} onChange={(e) => updateQuestion(ri, qi, mediaType, e.target.value)} placeholder="URL или нажмите «Добавить»" className="flex-1 min-w-0 rounded bg-slate-800 border border-slate-600 px-2 py-1.5 text-white text-xs" />
+                              {form.id?.trim() ? (
+                                <>
+                                  <input type="file" id={`${ri}-${qi}-${mediaType}`} accept={mediaType === 'image' ? 'image/*' : mediaType === 'video' ? 'video/*' : 'audio/*'} className="hidden" onChange={(e) => uploadMedia(ri, qi, mediaType, e)} />
+                                  <label htmlFor={`${ri}-${qi}-${mediaType}`} className="cursor-pointer px-3 py-1.5 rounded-lg bg-party-purple hover:bg-party-neon text-white text-xs font-medium whitespace-nowrap">
+                                    Добавить
+                                  </label>
+                                </>
+                              ) : (
+                                <span className="text-slate-500 text-xs">Сохраните пак, чтобы загружать файлы</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
                         {q.type === 'open' ? (
                           <input type="text" value={q.correctAnswer ?? ''} onChange={(e) => updateQuestion(ri, qi, 'correctAnswer', e.target.value)} placeholder="Правильный ответ (сравнение без учёта регистра)" className="w-full rounded-lg bg-slate-800 border border-slate-600 px-3 py-2 text-white text-sm focus:border-party-purple outline-none" />
                         ) : (

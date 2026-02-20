@@ -1,4 +1,5 @@
 import express from 'express';
+import multer from 'multer';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
@@ -21,9 +22,11 @@ const io = new Server(httpServer, {
 app.use(cors());
 app.use(express.json());
 
-// Папка с игровыми паками (создаём при отсутствии)
+// Папка с игровыми паками и медиа (создаём при отсутствии)
 const GAMES_DIR = join(__dirname, 'games');
+const MEDIA_DIR = join(GAMES_DIR, 'media');
 if (!fs.existsSync(GAMES_DIR)) fs.mkdirSync(GAMES_DIR, { recursive: true });
+if (!fs.existsSync(MEDIA_DIR)) fs.mkdirSync(MEDIA_DIR, { recursive: true });
 
 // Проверка доступности с телефона (откройте http://IP:3000/api/health в браузере телефона)
 app.get('/api/health', (req, res) => {
@@ -87,8 +90,12 @@ app.post('/api/packs', (req, res) => {
         rounds: rounds.slice(0, 10).map((r) => ({
           questions: (r.questions || []).slice(0, 10).map((q) => {
             const type = q.type === 'open' ? 'open' : 'choice';
+            const media = {};
+            if (q.image && String(q.image).trim()) media.image = String(q.image).trim();
+            if (q.video && String(q.video).trim()) media.video = String(q.video).trim();
+            if (q.audio && String(q.audio).trim()) media.audio = String(q.audio).trim();
             if (type === 'open') {
-              return { type: 'open', question: String(q.question || '').trim(), correctAnswer: String(q.correctAnswer ?? '').trim() };
+              return { type: 'open', question: String(q.question || '').trim(), correctAnswer: String(q.correctAnswer ?? '').trim(), ...media };
             }
             const options = Array.isArray(q.options) ? q.options.map((o) => String(o ?? '').trim()) : [];
             const opts = options.length ? options : ['', '', '', ''];
@@ -97,6 +104,7 @@ app.post('/api/packs', (req, res) => {
               question: String(q.question || '').trim(),
               options: opts.slice(0, 10),
               correctIndex: Math.max(0, Math.min(Number(q.correctIndex) || 0, opts.length - 1)),
+              ...media,
             };
           }),
         })),
@@ -110,6 +118,48 @@ app.post('/api/packs', (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// Медиа-файлы вопросов (фото, видео, аудио): раздаём статику до SPA
+app.use('/media', express.static(MEDIA_DIR));
+
+// Загрузка медиа для пака (админка)
+function sanitizeMediaFilename(name) {
+  if (name == null || typeof name !== 'string') return 'file';
+  return name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 128) || 'file';
+}
+
+const mediaUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      const id = sanitizePackId(req.params.id);
+      if (!id) return cb(new Error('Некорректный id пака'));
+      const dir = join(MEDIA_DIR, id);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      cb(null, dir);
+    },
+    filename: (req, file, cb) => {
+      const base = sanitizeMediaFilename(file.originalname) || 'file';
+      const ext = base.includes('.') ? base.slice(base.lastIndexOf('.')) : '';
+      const name = base.slice(0, base.lastIndexOf('.') || base.length) || 'file';
+      cb(null, `${name}-${Date.now()}${ext}`);
+    },
+  }),
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
+});
+
+app.post('/api/packs/:id/media', (req, res) => {
+  const id = sanitizePackId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Некорректный id пака' });
+  mediaUpload.single('file')(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: 'Файл слишком большой (макс. 50 МБ)' });
+      return res.status(500).json({ error: err.message || 'Ошибка загрузки' });
+    }
+    if (!req.file) return res.status(400).json({ error: 'Файл не выбран' });
+    const path = `${id}/${req.file.filename}`;
+    res.json({ path });
+  });
 });
 
 // Раздача статики React и SPA (после всех API-маршрутов)
@@ -156,13 +206,26 @@ function loadPackForGame(data) {
   return { questions: [], roundEndIndices: [], answerTimeSec: DEFAULT_TIME };
 }
 
+function resolveMediaUrl(value) {
+  if (!value || typeof value !== 'string') return undefined;
+  const s = value.trim();
+  if (!s) return undefined;
+  if (s.startsWith('http://') || s.startsWith('https://')) return s;
+  return '/media/' + (s.startsWith('/') ? s.slice(1) : s);
+}
+
 function normalizeQuestion(q) {
   const type = q.type === 'open' ? 'open' : 'choice';
+  const media = {};
+  if (q.image && String(q.image).trim()) media.image = String(q.image).trim();
+  if (q.video && String(q.video).trim()) media.video = String(q.video).trim();
+  if (q.audio && String(q.audio).trim()) media.audio = String(q.audio).trim();
   if (type === 'open') {
     return {
       type: 'open',
       question: q.question || '',
       correctAnswer: q.correctAnswer != null ? String(q.correctAnswer).trim() : '',
+      ...media,
     };
   }
   const options = Array.isArray(q.options) ? q.options.slice(0, 10) : [];
@@ -171,6 +234,7 @@ function normalizeQuestion(q) {
     question: q.question || '',
     options: options.length ? options : ['A', 'B', 'C', 'D'],
     correctIndex: Math.max(0, Math.min(Number(q.correctIndex) || 0, options.length - 1)),
+    ...media,
   };
 }
 
@@ -329,6 +393,9 @@ io.on('connection', (socket) => {
       question: q.question,
       options: q.type === 'choice' ? q.options : undefined,
       timeSec,
+      image: resolveMediaUrl(q.image),
+      video: resolveMediaUrl(q.video),
+      audio: resolveMediaUrl(q.audio),
     });
     socket.emit('question_host', q.type === 'open' ? { correctAnswer: q.correctAnswer } : { correctIndex: q.correctIndex });
 
@@ -436,6 +503,9 @@ io.on('connection', (socket) => {
       question: q.question,
       options: q.type === 'choice' ? q.options : undefined,
       timeSec,
+      image: resolveMediaUrl(q.image),
+      video: resolveMediaUrl(q.video),
+      audio: resolveMediaUrl(q.audio),
     });
     socket.emit('question_host', q.type === 'open' ? { correctAnswer: q.correctAnswer } : { correctIndex: q.correctIndex });
 

@@ -60,6 +60,9 @@ export default function Host() {
         options: data.options || [],
         correctIndex: prev?.correctIndex ?? 0,
         correctAnswer: prev?.correctAnswer ?? '',
+        image: data.image ?? undefined,
+        video: data.video ?? undefined,
+        audio: data.audio ?? undefined,
       }));
       setQuestionIndex(data.questionIndex);
       setTotalQuestions(data.total);
@@ -244,6 +247,19 @@ export default function Host() {
             <h2 className="text-3xl md:text-5xl font-bold text-white mb-12 leading-tight">
               {question.question}
             </h2>
+            {(question.image || question.video || question.audio) && (
+              <div className="flex flex-col gap-4 mb-8">
+                {question.image && (
+                  <img src={question.image} alt="" className="max-h-80 w-auto rounded-2xl border border-slate-600 object-contain" />
+                )}
+                {question.video && (
+                  <video src={question.video} controls className="max-h-80 w-full rounded-2xl border border-slate-600 bg-black" />
+                )}
+                {question.audio && (
+                  <audio src={question.audio} controls className="w-full" />
+                )}
+              </div>
+            )}
             {question.type === 'open' ? (
               <p className="text-party-cyan text-xl mb-8">Открытый ответ — игроки вводят текст на телефоне</p>
             ) : (

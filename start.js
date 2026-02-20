@@ -6,6 +6,7 @@
  */
 import { spawn, exec } from 'child_process';
 import http from 'http';
+import os from 'os';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import fs from 'fs';
@@ -14,7 +15,26 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const PORT = Number(process.env.PORT) || 3000;
-const BASE_URL = `http://localhost:${PORT}`;
+
+function getLocalIPs() {
+  const nets = os.networkInterfaces();
+  const list = [];
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name]) {
+      if (net.family === 'IPv4' && !net.internal) list.push(net.address);
+    }
+  }
+  return list;
+}
+
+function getLANIP() {
+  const list = getLocalIPs();
+  const lan = list.filter((ip) => ip.startsWith('192.168.') || ip.startsWith('10.'));
+  return lan[0] || list[0] || 'localhost';
+}
+
+const LAN_IP = getLANIP();
+const BASE_URL = LAN_IP === 'localhost' ? `http://localhost:${PORT}` : `http://${LAN_IP}:${PORT}`;
 
 function run(cmd, args, opts = {}) {
   return new Promise((resolve, reject) => {
@@ -95,7 +115,13 @@ async function main() {
 
   waitForServer(40, 500)
     .then(() => {
-      console.log('\n✅ Сервер запущен. Открываю браузер...');
+      console.log('\n✅ Сервер запущен.');
+      if (LAN_IP !== 'localhost') {
+        console.log(`   Открываю по адресу для сети: ${BASE_URL}`);
+        console.log(`   (по этой ссылке можно зайти с телефона в той же Wi‑Fi)`);
+      } else {
+        console.log('   Открываю: ' + BASE_URL);
+      }
       openBrowser(BASE_URL);
     })
     .catch(() => {
