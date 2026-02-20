@@ -1,0 +1,35 @@
+{
+  "title": "qwerq",
+  "answerTimeSec": 20,
+  "rounds": [
+    {
+      "questions": [
+        {
+          "type": "choice",
+          "question": "1+1=?",
+          "options": [
+            "1",
+            "2",
+            "3",
+            "4"
+          ],
+          "correctIndex": 1
+        },
+        {
+          "type": "open",
+          "question": "Макс?",
+          "correctAnswer": "Максим"
+        }
+      ]
+    },
+    {
+      "questions": [
+        {
+          "type": "open",
+          "question": "Анус?",
+          "correctAnswer": "Максимилианус"
+        }
+      ]
+    }
+  ]
+}

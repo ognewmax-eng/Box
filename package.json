@@ -1,0 +1,24 @@
+{
+  "name": "box-party-game",
+  "version": "1.0.0",
+  "description": "Локальная мультиплеерная Party Game платформа (как Jackbox)",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "node server.js",
+    "dev:client": "cd client && npm run dev",
+    "build": "cd client && npm run build",
+    "start": "npm run build && node server.js",
+    "tunnel": "npm run build && concurrently -n s,t \"node server.js\" \"npx localtunnel --port 3000\""
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "socket.io": "^4.7.5",
+    "qrcode": "^1.5.3"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

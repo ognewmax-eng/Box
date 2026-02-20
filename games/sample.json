@@ -1,0 +1,41 @@
+{
+  "title": "Пример викторины",
+  "rounds": [
+    {
+      "questions": [
+        {
+          "type": "choice",
+          "question": "Сколько планет в Солнечной системе?",
+          "options": ["7", "8", "9", "10"],
+          "correctIndex": 1
+        },
+        {
+          "type": "open",
+          "question": "Столица России?",
+          "correctAnswer": "Москва"
+        },
+        {
+          "type": "choice",
+          "question": "Какой газ преобладает в атмосфере Земли?",
+          "options": ["Кислород", "Углекислый газ", "Азот", "Водород"],
+          "correctIndex": 2
+        }
+      ]
+    },
+    {
+      "questions": [
+        {
+          "type": "open",
+          "question": "В каком году человек впервые полетел в космос?",
+          "correctAnswer": "1961"
+        },
+        {
+          "type": "choice",
+          "question": "Самая длинная река в мире?",
+          "options": ["Амазонка", "Нил", "Миссисипи", "Волга"],
+          "correctIndex": 1
+        }
+      ]
+    }
+  ]
+}
