@@ -40,4 +40,6 @@ export const SOCKET_EVENTS = {
   // Синхронизация
   ROOM_STATE: 'room_state',
   HOST_DISCONNECT: 'host_disconnect',
+  QUESTION_HOST: 'question_host',
+  PACK_LOAD_ERROR: 'pack_load_error',
 };

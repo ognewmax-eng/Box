@@ -4,6 +4,8 @@ export const GAME_STATES = {
   RESULTS: 'RESULTS',
 };
 
+export const ROOM_CODE_LENGTH = 4;
+
 export const SOCKET_EVENTS = {
   CREATE_ROOM: 'create_room',
   ROOM_CREATED: 'room_created',
@@ -27,6 +29,8 @@ export const SOCKET_EVENTS = {
   ROUND_LEADERBOARD_SHOWN: 'round_leaderboard_shown',
   ROOM_STATE: 'room_state',
   HOST_DISCONNECT: 'host_disconnect',
+  QUESTION_HOST: 'question_host',
+  PACK_LOAD_ERROR: 'pack_load_error',
 };
 
 export const API_BASE = import.meta.env.DEV ? '' : '';

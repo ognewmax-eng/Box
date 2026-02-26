@@ -1,1 +1,7 @@
 node_modules
+
+# Сборка pkg (папка Builds остаётся, артефакты — нет)
+Builds/BoxParty
+Builds/client
+Builds/games
+Builds/server-cjs.cjs

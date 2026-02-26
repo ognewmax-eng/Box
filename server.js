@@ -9,8 +9,11 @@ import { dirname, join } from 'path';
 import fs from 'fs';
 import { GAME_STATES, SOCKET_EVENTS, QUESTION_TIME_SEC, ROOM_CODE_LENGTH } from './constants.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+// В CJS-бандле (pkg) import.meta.url отсутствует — не вызываем fileURLToPath(undefined)
+const hasImportMetaUrl = typeof import.meta !== 'undefined' && import.meta?.url;
+const __dirname = hasImportMetaUrl ? dirname(fileURLToPath(import.meta.url)) : dirname(process.execPath);
+const isPkg = typeof process.pkg !== 'undefined';
+const appRoot = isPkg ? dirname(process.execPath) : __dirname;
 
 const app = express();
 const httpServer = createServer(app);
@@ -23,7 +26,7 @@ app.use(cors());
 app.use(express.json());
 
 // Папка с игровыми паками и медиа (создаём при отсутствии)
-const GAMES_DIR = join(__dirname, 'games');
+const GAMES_DIR = join(appRoot, 'games');
 const MEDIA_DIR = join(GAMES_DIR, 'media');
 if (!fs.existsSync(GAMES_DIR)) fs.mkdirSync(GAMES_DIR, { recursive: true });
 if (!fs.existsSync(MEDIA_DIR)) fs.mkdirSync(MEDIA_DIR, { recursive: true });
@@ -164,7 +167,7 @@ app.post('/api/packs/:id/media', (req, res) => {
 });
 
 // Раздача статики React и SPA (после всех API-маршрутов)
-const clientBuild = join(__dirname, 'client', 'dist');
+const clientBuild = join(appRoot, 'client', 'dist');
 if (fs.existsSync(clientBuild)) {
   app.use(express.static(clientBuild));
   app.get('*', (req, res) => res.sendFile(join(clientBuild, 'index.html')));
@@ -313,8 +316,12 @@ io.on('connection', (socket) => {
   });
 
   socket.on(SOCKET_EVENTS.JOIN_ROOM, ({ code, nickname }) => {
-    const room = getRoom(code);
-    const c = (code || '').toUpperCase();
+    if (!code || typeof code !== 'string' || !String(code).trim()) {
+      socket.emit(SOCKET_EVENTS.JOIN_ERROR, { message: 'Укажите код комнаты' });
+      return;
+    }
+    const c = String(code).trim().toUpperCase();
+    const room = getRoom(c);
     if (!room) {
       socket.emit(SOCKET_EVENTS.JOIN_ERROR, { message: 'Комната не найдена' });
       return;
@@ -380,6 +387,7 @@ io.on('connection', (socket) => {
         pack = loadPackForGame(data);
       } catch (e) {
         console.error(e);
+        socket.emit(SOCKET_EVENTS.PACK_LOAD_ERROR, { message: 'Пак не загружен, используется пример вопроса' });
       }
     }
     if (pack.questions.length === 0) {
@@ -413,7 +421,7 @@ io.on('connection', (socket) => {
       video: resolveMediaUrl(q.video),
       audio: resolveMediaUrl(q.audio),
     });
-    socket.emit('question_host', q.type === 'open' ? { correctAnswer: q.correctAnswer } : { correctIndex: q.correctIndex });
+    socket.emit(SOCKET_EVENTS.QUESTION_HOST, q.type === 'open' ? { correctAnswer: q.correctAnswer } : { correctIndex: q.correctIndex });
 
     if (timerMode === 'auto') {
       const timer = setTimeout(() => {
@@ -463,7 +471,6 @@ io.on('connection', (socket) => {
       type: question.type,
       correctIndex: isOpen ? undefined : question.correctIndex,
       correctAnswer: isOpen ? question.correctAnswer : undefined,
-      answers: Object.fromEntries(room.answers),
       scores: Object.fromEntries(room.scores),
       playerScores: sorted,
       roundOver: isRoundEnd,
@@ -497,6 +504,7 @@ io.on('connection', (socket) => {
     const code = socket.roomCode;
     const room = getRoom(code);
     if (!room || room.hostId !== socket.id) return;
+    if (room.state !== GAME_STATES.RESULTS) return;
 
     if (room.currentTimer) clearTimeout(room.currentTimer);
     const nextIndex = room.currentQuestionIndex + 1;
@@ -531,7 +539,7 @@ io.on('connection', (socket) => {
       video: resolveMediaUrl(q.video),
       audio: resolveMediaUrl(q.audio),
     });
-    socket.emit('question_host', q.type === 'open' ? { correctAnswer: q.correctAnswer } : { correctIndex: q.correctIndex });
+    socket.emit(SOCKET_EVENTS.QUESTION_HOST, q.type === 'open' ? { correctAnswer: q.correctAnswer } : { correctIndex: q.correctIndex });
 
     if (timerMode === 'auto') {
       const timer = setTimeout(() => {
@@ -571,6 +579,7 @@ io.on('connection', (socket) => {
     const code = socket.roomCode;
     const room = getRoom(code);
     if (!room || room.hostId !== socket.id) return;
+    if (room.state !== GAME_STATES.QUESTION) return;
     const q = room.questions[questionIndex];
     if (!q) return;
     // Останавливаем таймер, чтобы не отправить RESULTS дважды (по кнопке и по таймауту)

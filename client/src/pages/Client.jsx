@@ -1,16 +1,18 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Gamepad2 } from 'lucide-react';
 import { useSocket } from '../hooks/useSocket';
-import { SOCKET_EVENTS } from '../constants';
+import { SOCKET_EVENTS, ROOM_CODE_LENGTH } from '../constants';
 import { playTimeUpSound } from '../utils/playTimeUpSound';
 
 const LETTERS = ['A', 'B', 'C', 'D'];
+const ANSWER_COLORS = ['#ef4444', '#3b82f6', '#10b981', '#fbbf24'];
 
 export default function Client() {
   const [searchParams] = useSearchParams();
   const roomFromUrl = searchParams.get('room') || '';
-  const { socket, connected } = useSocket();
+  const { socket, connected, retry, connectionError } = useSocket();
   const [screen, setScreen] = useState('join'); // join | lobby | question | results | gameover | error
   const [roomCode, setRoomCode] = useState(roomFromUrl.toUpperCase());
   const [nickname, setNickname] = useState('');
@@ -143,56 +145,88 @@ export default function Client() {
 
   if (!socket) {
     return (
-      <div className="min-h-screen bg-party-dark flex items-center justify-center text-party-neon p-4">
+      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center text-[#22d3ee] p-4">
         Подключение…
       </div>
     );
   }
 
+  if (!connected) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center gap-4 p-4 text-center max-w-md">
+        <p className="text-gray-400 font-bold">Нет связи с сервером</p>
+        {connectionError && (
+          <div className="rounded-2xl bg-white/5 border border-white/10 p-4 text-left w-full">
+            <p className="text-[#22d3ee] font-mono text-sm mb-2">Код: {connectionError.code}</p>
+            <p className="text-gray-300 text-sm">{connectionError.message}</p>
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={retry}
+          className="px-6 py-3 rounded-2xl bg-white/10 border border-white/20 hover:bg-white/20 font-bold text-white"
+        >
+          Повторить
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-party-dark text-white p-4 pb-10 safe-area-pb">
+    <div className="min-h-screen bg-[#0a0a0f] text-white p-4 pb-10 safe-area-pb relative overflow-hidden">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-0 right-0 w-72 h-72 bg-[#a855f7] rounded-full blur-[120px] opacity-20" />
+        <div className="absolute bottom-0 left-0 w-72 h-72 bg-[#22d3ee] rounded-full blur-[120px] opacity-20" />
+      </div>
       <AnimatePresence mode="wait">
         {screen === 'join' && (
           <motion.div
             key="join"
-            className="max-w-md mx-auto pt-8"
+            className="relative z-10 max-w-md mx-auto pt-8"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-party-neon to-party-pink mb-2">
-              Войти в игру
-            </h1>
-            <p className="text-slate-400 mb-8">Введите код комнаты и имя</p>
-            <form onSubmit={joinRoom} className="space-y-4">
+            <div className="text-center mb-8">
+              <div className="flex items-center justify-center mb-3">
+                <Gamepad2 className="w-10 h-10 text-[#a855f7]" />
+              </div>
+              <h1 className="text-3xl font-black text-white mb-2">
+                BOX <span className="text-[#a855f7]">PARTY</span>
+              </h1>
+              <p className="text-gray-400">Введите код комнаты и имя</p>
+            </div>
+            <form onSubmit={joinRoom} className="space-y-6">
               <div>
-                <label className="block text-slate-400 text-sm mb-2">Код комнаты</label>
+                <label htmlFor="client-room-code" className="block text-gray-400 text-sm mb-2">Код комнаты</label>
                 <input
+                  id="client-room-code"
                   type="text"
                   value={roomCode}
-                  onChange={(e) => setRoomCode(e.target.value.toUpperCase().slice(0, 4))}
+                  onChange={(e) => setRoomCode(e.target.value.toUpperCase().slice(0, ROOM_CODE_LENGTH))}
                   placeholder="XXXX"
-                  maxLength={4}
-                  className="w-full rounded-2xl bg-slate-800 border border-slate-600 px-4 py-4 text-xl font-mono tracking-[0.4em] text-center text-white placeholder-slate-500 focus:border-party-purple focus:ring-2 focus:ring-party-purple/50 outline-none"
+                  maxLength={ROOM_CODE_LENGTH}
+                  className="w-full rounded-2xl bg-white/5 border-2 border-white/10 px-4 py-5 text-2xl font-black tracking-[0.3em] text-center text-white placeholder-gray-600 focus:border-[#a855f7] focus:outline-none transition-colors"
                 />
               </div>
               <div>
-                <label className="block text-slate-400 text-sm mb-2">Ваше имя</label>
+                <label htmlFor="client-nickname" className="block text-gray-400 text-sm mb-2">Ваше имя</label>
                 <input
+                  id="client-nickname"
                   type="text"
                   value={nickname}
                   onChange={(e) => setNickname(e.target.value.slice(0, 20))}
                   placeholder="Никнейм"
-                  className="w-full rounded-2xl bg-slate-800 border border-slate-600 px-4 py-4 text-lg text-white placeholder-slate-500 focus:border-party-purple focus:ring-2 focus:ring-party-purple/50 outline-none"
+                  className="w-full rounded-2xl bg-white/5 border-2 border-white/10 px-4 py-4 text-lg font-bold text-white placeholder-gray-600 focus:border-[#22d3ee] focus:outline-none transition-colors"
                 />
               </div>
               <motion.button
                 type="submit"
                 disabled={!connected || !roomCode.trim()}
-                className="w-full py-4 rounded-2xl bg-party-purple hover:bg-party-neon disabled:opacity-50 text-lg font-bold transition-all active:scale-[0.98]"
+                className="w-full py-6 rounded-2xl bg-gradient-to-r from-[#a855f7] to-[#7c3aed] text-white text-xl font-black disabled:opacity-50 transition-all hover:shadow-nexus-purple active:scale-[0.98]"
                 whileTap={{ scale: 0.98 }}
               >
-                Войти
+                Войти в игру
               </motion.button>
             </form>
           </motion.div>
@@ -201,15 +235,15 @@ export default function Client() {
         {screen === 'error' && (
           <motion.div
             key="error"
-            className="max-w-md mx-auto pt-8 text-center"
+            className="relative z-10 max-w-md mx-auto pt-8 text-center"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            <p className="text-party-pink text-xl mb-6">{error}</p>
+            <p className="text-[#ef4444] text-xl mb-6">{error}</p>
             <motion.button
               onClick={() => { setScreen('join'); setError(''); }}
-              className="px-8 py-4 rounded-2xl bg-slate-600 hover:bg-slate-500 font-bold"
+              className="px-8 py-4 rounded-2xl bg-white/10 border border-white/10 hover:bg-white/20 font-bold"
               whileTap={{ scale: 0.98 }}
             >
               Назад
@@ -220,19 +254,19 @@ export default function Client() {
         {screen === 'lobby' && (
           <motion.div
             key="lobby"
-            className="max-w-md mx-auto pt-8 text-center"
+            className="relative z-10 max-w-md mx-auto pt-8 text-center"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            <h2 className="text-2xl font-bold text-party-neon mb-2">Вы в игре!</h2>
-            <p className="text-slate-400">Ожидайте начала раунда на экране ведущего.</p>
+            <h2 className="text-2xl font-black text-white mb-2">Вы в игре!</h2>
+            <p className="text-gray-400 mb-8">Ожидайте начала раунда на экране ведущего.</p>
             <motion.div
-              className="mt-8 p-6 rounded-2xl bg-slate-800/50 border border-party-purple/30"
+              className="rounded-2xl bg-gradient-to-br from-white/10 to-white/5 border border-white/10 backdrop-blur-xl p-8"
               animate={{ opacity: [0.7, 1, 0.7] }}
               transition={{ repeat: Infinity, duration: 2 }}
             >
-              <span className="text-party-cyan">Ожидание...</span>
+              <span className="text-[#22d3ee] font-bold">Ожидание...</span>
             </motion.div>
           </motion.div>
         )}
@@ -240,37 +274,39 @@ export default function Client() {
         {screen === 'question' && question && (
           <motion.div
             key="question"
-            className="max-w-md mx-auto"
+            className="relative z-10 max-w-md mx-auto"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
             <div className="flex justify-between items-center mb-4">
-              <span className="text-slate-400">
+              <span className="text-gray-400 font-bold">
                 {questionIndex + 1} / {totalQuestions}
               </span>
               {timerMode === 'manual' && !timerStarted ? (
-                <span className="text-slate-400 text-sm">Ожидайте старта таймера</span>
+                <span className="text-gray-400 text-sm">Ожидайте старта таймера</span>
               ) : (
-                <span className={`font-mono font-bold ${timeLeft <= 5 ? 'text-party-pink' : 'text-party-cyan'}`}>
+                <span className={`font-mono font-black ${timeLeft <= 5 ? 'text-[#fbbf24]' : 'text-[#22d3ee]'}`}>
                   {timeLeft}
                 </span>
               )}
             </div>
-            <h2 className="text-xl font-bold text-white mb-6 leading-snug">{question.question}</h2>
-            {(question.image || question.video || question.audio) && (
-              <div className="flex flex-col gap-3 mb-6">
-                {question.image && (
-                  <img src={question.image} alt="" className="max-h-48 w-full rounded-xl border border-slate-600 object-contain bg-slate-800/50" />
-                )}
-                {question.video && (
-                  <video src={question.video} controls className="max-h-48 w-full rounded-xl border border-slate-600 bg-black" />
-                )}
-                {question.audio && (
-                  <audio src={question.audio} controls className="w-full" />
-                )}
-              </div>
-            )}
+            <div className="rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl p-6 mb-6">
+              <h2 className="text-xl font-bold text-white mb-4 leading-snug">{question.question}</h2>
+              {(question.image || question.video || question.audio) && (
+                <div className="flex flex-col gap-3 mb-4">
+                  {question.image && (
+                    <img src={question.image} alt="" className="max-h-48 w-full rounded-xl border border-white/10 object-contain bg-black/30" />
+                  )}
+                  {question.video && (
+                    <video src={question.video} controls className="max-h-48 w-full rounded-xl border border-white/10 bg-black" />
+                  )}
+                  {question.audio && (
+                    <audio src={question.audio} controls className="w-full" />
+                  )}
+                </div>
+              )}
+            </div>
             {question.type === 'open' ? (
               <form onSubmit={submitOpenAnswer} className="space-y-4">
                 <input
@@ -279,13 +315,13 @@ export default function Client() {
                   onChange={(e) => setOpenAnswerText(e.target.value)}
                   placeholder="Введите ответ..."
                   disabled={selectedAnswer !== null}
-                  className="w-full rounded-2xl bg-slate-800 border-2 border-slate-600 px-5 py-4 text-lg text-white placeholder-slate-500 focus:border-party-purple outline-none disabled:opacity-50"
+                  className="w-full rounded-2xl bg-white/5 border-2 border-white/10 px-5 py-4 text-lg text-white placeholder-gray-500 focus:border-[#a855f7] outline-none disabled:opacity-50"
                   autoComplete="off"
                 />
                 <motion.button
                   type="submit"
                   disabled={selectedAnswer !== null || !openAnswerText.trim()}
-                  className="w-full py-4 rounded-2xl bg-party-purple hover:bg-party-neon disabled:opacity-50 text-lg font-bold"
+                  className="w-full py-5 rounded-2xl bg-gradient-to-r from-[#a855f7] to-[#7c3aed] text-white text-lg font-black disabled:opacity-50 hover:shadow-nexus-purple"
                   whileTap={{ scale: 0.98 }}
                 >
                   Отправить ответ
@@ -298,16 +334,19 @@ export default function Client() {
                     key={i}
                     onClick={() => submitAnswer(i)}
                     disabled={selectedAnswer !== null}
-                    className={`w-full rounded-2xl px-5 py-4 text-left text-lg font-medium transition-all active:scale-[0.98] flex items-center ${
+                    className={`w-full rounded-2xl px-5 py-4 text-left text-lg font-bold transition-all active:scale-[0.98] flex items-center border-2 ${
                       selectedAnswer === i
-                        ? 'bg-party-purple border-2 border-party-neon text-white'
+                        ? 'bg-white/10 border-white/30 text-white shadow-lg'
                         : selectedAnswer !== null
-                          ? 'bg-slate-800/50 text-slate-500 border-2 border-slate-700'
-                          : 'bg-slate-800 border-2 border-slate-600 text-white hover:border-party-purple'
+                          ? 'bg-white/5 text-gray-500 border-white/10'
+                          : 'bg-white/5 border-white/10 text-white hover:border-white/20'
                     }`}
                     whileTap={selectedAnswer === null ? { scale: 0.98 } : {}}
                   >
-                    <span className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center mr-3 font-bold text-party-neon">
+                    <span
+                      className="w-10 h-10 rounded-xl flex items-center justify-center mr-4 font-black text-white shrink-0"
+                      style={{ backgroundColor: ANSWER_COLORS[i % 4] }}
+                    >
                       {LETTERS[i]}
                     </span>
                     {opt}
@@ -317,7 +356,7 @@ export default function Client() {
             )}
             {selectedAnswer !== null && (
               <motion.p
-                className="mt-6 text-center text-party-cyan font-medium"
+                className="mt-6 text-center text-[#22d3ee] font-bold"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
               >
@@ -330,7 +369,7 @@ export default function Client() {
         {screen === 'results' && (
           <motion.div
             key="results"
-            className="max-w-md mx-auto pt-8"
+            className="relative z-10 max-w-md mx-auto pt-8"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -338,52 +377,52 @@ export default function Client() {
             {results?.roundOver ? (
               showRoundLeaderboard ? (
                 <>
-                  <h2 className="text-2xl font-bold text-party-pink mb-2">Итоги раунда {results.roundNumber ?? 1}</h2>
-                  <h3 className="text-xl font-bold text-party-neon mb-4">Таблица лидеров</h3>
+                  <h2 className="text-2xl font-black text-white mb-2">Итоги раунда {results.roundNumber ?? 1}</h2>
+                  <h3 className="text-xl font-bold text-[#a855f7] mb-4">Таблица лидеров</h3>
                   <ul className="space-y-3 mb-8">
                     {(results?.roundLeaderboard || results?.playerScores || []).map((entry, i) => (
                       <motion.li
                         key={entry.nickname ? `${entry.nickname}-${i}` : i}
-                        className="flex justify-between items-center rounded-2xl bg-slate-800/60 px-4 py-4 border border-slate-600/50"
+                        className="flex justify-between items-center rounded-2xl bg-white/5 border border-white/10 px-4 py-4"
                         initial={{ opacity: 0, x: -10 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: i * 0.05 }}
                       >
-                        <span className="text-party-neon font-bold">#{i + 1}</span>
+                        <span className="text-[#a855f7] font-bold">#{i + 1}</span>
                         <span className="text-white">{entry.nickname}</span>
-                        <span className="text-party-cyan font-bold">{entry.score}</span>
+                        <span className="text-[#fbbf24] font-bold">{entry.score}</span>
                       </motion.li>
                     ))}
                   </ul>
-                  <p className="text-slate-400 text-center">
+                  <p className="text-gray-400 text-center">
                     Следующий раунд скоро…
                   </p>
                 </>
               ) : (
                 <>
-                  <h2 className="text-2xl font-bold text-party-neon mb-4">Правильный ответ</h2>
-                  <p className="text-slate-400 text-center mb-6">Показан на экране ведущего</p>
-                  <p className="text-slate-500 text-center">
+                  <h2 className="text-2xl font-bold text-[#a855f7] mb-4">Правильный ответ</h2>
+                  <p className="text-gray-400 text-center mb-6">Показан на экране ведущего</p>
+                  <p className="text-gray-500 text-center">
                     Ожидайте таблицу лидеров…
                   </p>
                 </>
               )
             ) : (
               <>
-                <h2 className="text-2xl font-bold text-party-neon mb-6">Результаты</h2>
+                <h2 className="text-2xl font-bold text-[#a855f7] mb-6">Результаты</h2>
                 <ul className="space-y-3 mb-6">
                   {(results?.playerScores || []).map((entry, i) => (
                     <li
                       key={entry.nickname ? `${entry.nickname}-${i}` : i}
-                      className="flex justify-between items-center rounded-2xl bg-slate-800/60 px-4 py-3"
+                      className="flex justify-between items-center rounded-2xl bg-white/5 border border-white/10 px-4 py-3"
                     >
-                      <span className="text-party-neon font-bold">#{i + 1}</span>
+                      <span className="text-[#a855f7] font-bold">#{i + 1}</span>
                       <span className="text-white">{entry.nickname}</span>
-                      <span className="text-party-cyan font-bold">{entry.score}</span>
+                      <span className="text-[#fbbf24] font-bold">{entry.score}</span>
                     </li>
                   ))}
                 </ul>
-                <p className="text-slate-400 text-center">
+                <p className="text-gray-400 text-center">
                   Следующий вопрос скоро…
                 </p>
               </>
@@ -394,26 +433,26 @@ export default function Client() {
         {screen === 'gameover' && (
           <motion.div
             key="gameover"
-            className="max-w-md mx-auto pt-8"
+            className="relative z-10 max-w-md mx-auto pt-8"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-party-neon to-party-pink mb-8 text-center">
+            <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#a855f7] via-[#22d3ee] to-[#fbbf24] mb-8 text-center">
               Игра окончена!
             </h1>
             <ul className="space-y-3 mb-10">
               {leaderboard.map((entry, i) => (
                 <motion.li
                   key={entry.nickname ? `${entry.nickname}-${i}` : i}
-                  className="flex justify-between items-center rounded-2xl bg-slate-800/60 px-4 py-4 text-lg"
+                  className="flex justify-between items-center rounded-2xl bg-white/5 border border-white/10 px-4 py-4 text-lg"
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.08 }}
                 >
-                  <span className="text-party-neon font-bold">#{i + 1}</span>
+                  <span className="text-[#a855f7] font-bold">#{i + 1}</span>
                   <span className="text-white">{entry.nickname}</span>
-                  <span className="text-party-cyan font-bold">{entry.score}</span>
+                  <span className="text-[#fbbf24] font-bold">{entry.score}</span>
                 </motion.li>
               ))}
             </ul>

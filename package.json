@@ -10,7 +10,9 @@
     "dev:client": "cd client && npm run dev",
     "build": "cd client && npm run build",
     "start": "npm run build && node server.js",
-    "tunnel": "npm run build && concurrently -n s,t \"node server.js\" \"npx localtunnel --port 3000\""
+    "tunnel": "npm run build && concurrently -n s,t \"node server.js\" \"npx localtunnel --port 3000\"",
+    "test": "node server.constants.test.js && cd client && npm run test",
+    "build:pkg": "node scripts/build-pkg.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -20,6 +22,8 @@
     "socket.io": "^4.7.5"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "esbuild": "^0.24.0",
+    "pkg": "^5.8.0"
   }
 }
