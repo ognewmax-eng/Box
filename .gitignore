@@ -5,3 +5,8 @@ Builds/BoxParty
 Builds/client
 Builds/games
 Builds/server-cjs.cjs
+
+Builds-Windows/BoxParty.exe
+Builds-Windows/client
+Builds-Windows/games
+Builds-Windows/server-cjs.cjs

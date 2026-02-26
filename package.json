@@ -12,7 +12,8 @@
     "start": "npm run build && node server.js",
     "tunnel": "npm run build && concurrently -n s,t \"node server.js\" \"npx localtunnel --port 3000\"",
     "test": "node server.constants.test.js && cd client && npm run test",
-    "build:pkg": "node scripts/build-pkg.js"
+    "build:pkg": "node scripts/build-pkg.js",
+    "build:pkg:win": "node scripts/build-pkg-win.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
