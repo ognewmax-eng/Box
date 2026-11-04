@@ -2,12 +2,6 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import { getSocketErrorInfo } from '../utils/socketErrorCodes';
 
-const getSocketUrl = () => {
-  if (import.meta.env.DEV && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
-    return 'http://localhost:3000';
-  return window.location.origin;
-};
-
 export function useSocket() {
   const [socket, setSocket] = useState(null);
   const [connected, setConnected] = useState(false);
@@ -17,7 +11,7 @@ export function useSocket() {
 
   useEffect(() => {
     mountedRef.current = true;
-    const s = io(getSocketUrl(), { transports: ['websocket', 'polling'] });
+    const s = io(window.location.origin, { transports: ['websocket', 'polling'] });
     socketRef.current = s;
 
     const onConnect = () => {

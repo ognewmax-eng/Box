@@ -10,3 +10,12 @@ Builds-Windows/BoxParty.exe
 Builds-Windows/client
 Builds-Windows/games
 Builds-Windows/server-cjs.cjs
+
+# Зависимости и результаты сборки
+client/node_modules
+client/dist
+*.zip
+.DS_Store
+
+# Локальные секреты и загруженные файлы
+.admin-password

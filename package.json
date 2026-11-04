@@ -11,20 +11,23 @@
     "build": "cd client && npm run build",
     "start": "npm run build && node server.js",
     "tunnel": "npm run build && concurrently -n s,t \"node server.js\" \"npx localtunnel --port 3000\"",
-    "test": "node server.constants.test.js && cd client && npm run test",
+    "test": "node server.constants.test.js && node --test server/game.test.js server/http.test.js && cd client && npm run test",
     "build:pkg": "node scripts/build-pkg.js",
     "build:pkg:win": "node scripts/build-pkg-win.js"
   },
   "dependencies": {
-    "cors": "^2.8.5",
     "express": "^4.21.0",
-    "multer": "^2.0.2",
+    "multer": "^2.5.0",
     "qrcode": "^1.5.3",
-    "socket.io": "^4.7.5"
+    "socket.io": "^4.8.4"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
     "esbuild": "^0.24.0",
-    "pkg": "^5.8.0"
+    "pkg": "^5.8.0",
+    "socket.io-client": "^4.8.4"
+  },
+  "engines": {
+    "node": ">=20.19"
   }
 }

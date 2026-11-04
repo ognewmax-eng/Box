@@ -2,17 +2,37 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { QRCodeSVG } from 'qrcode.react';
 import { useSocket } from '../hooks/useSocket';
-import { SOCKET_EVENTS, GAME_STATES } from '../constants';
+import { ANSWER_COLORS, ANSWER_LETTERS as LETTERS, GAME_STATES, SOCKET_EVENTS } from '../constants';
 import { playTimeUpSound } from '../utils/playTimeUpSound';
+import { clearHostSession, loadHostSession, saveHostSession } from '../utils/session';
 
-const LETTERS = 'ABCDEFGHIJ'.split('');
+const PHASE_BY_STATE = {
+  [GAME_STATES.LOBBY]: 'lobby',
+  [GAME_STATES.QUESTION]: 'question',
+  [GAME_STATES.RESULTS]: 'results',
+  [GAME_STATES.GAME_OVER]: 'gameover',
+};
+
+function toQuestionState(data, answerKey) {
+  return {
+    type: data.type || 'choice',
+    question: data.question,
+    options: data.options || [],
+    roundTitle: data.roundTitle,
+    correctIndex: answerKey?.correctIndex ?? 0,
+    correctAnswer: answerKey?.correctAnswer ?? '',
+    image: data.image ?? undefined,
+    video: data.video ?? undefined,
+    audio: data.audio ?? undefined,
+  };
+}
 
 export default function Host() {
   const { socket, connected, retry, connectionError } = useSocket();
   const [roomCode, setRoomCode] = useState('');
   const [joinUrl, setJoinUrl] = useState('');
   const [players, setPlayers] = useState([]);
-  const [phase, setPhase] = useState('create'); // create | lobby | question | results | gameover
+  const [phase, setPhase] = useState(() => (loadHostSession() ? 'resuming' : 'create')); // create | resuming | lobby | question | results | gameover | replaced
   const [question, setQuestion] = useState(null);
   const [questionIndex, setQuestionIndex] = useState(0);
   const [totalQuestions, setTotalQuestions] = useState(0);
@@ -26,7 +46,7 @@ export default function Host() {
   const [timerMode, setTimerMode] = useState('auto'); // 'auto' | 'manual'
   const [timerStarted, setTimerStarted] = useState(true);
   const [showRoundLeaderboard, setShowRoundLeaderboard] = useState(false);
-  const [packLoadError, setPackLoadError] = useState('');
+  const [notice, setNotice] = useState('');
   const timeUpSoundRef = useRef({ questionIndex: -1, played: false });
 
   useEffect(() => {
@@ -49,85 +69,91 @@ export default function Host() {
 
   useEffect(() => {
     if (!socket) return;
-    socket.on(SOCKET_EVENTS.ROOM_CREATED, ({ code, joinUrl: url }) => {
-      setRoomCode(code);
-      setJoinUrl(url);
-      setPhase('lobby');
-      setPlayers([]);
-      setPackLoadError('');
-    });
-    socket.on(SOCKET_EVENTS.PLAYER_JOINED, ({ players: p }) => setPlayers(p));
-    socket.on(SOCKET_EVENTS.PLAYER_LEFT, ({ players: p }) => setPlayers(p));
-    socket.on(SOCKET_EVENTS.GAME_STARTED, () => setPhase('question'));
-    socket.on(SOCKET_EVENTS.PACK_LOAD_ERROR, ({ message }) => setPackLoadError(message || 'Пак не загружен'));
-    socket.on(SOCKET_EVENTS.QUESTION_START, (data) => {
-      setShowRoundLeaderboard(false);
+
+    const applyQuestion = (data, answerKey) => {
       const mode = data.timerMode === 'manual' ? 'manual' : 'auto';
+      const sec = data.timeSec ?? 15;
       setTimerMode(mode);
-      setTimerStarted(mode === 'auto');
-      setQuestion((prev) => ({
-        type: data.type || 'choice',
-        question: data.question,
-        options: data.options || [],
-        correctIndex: prev?.correctIndex ?? 0,
-        correctAnswer: prev?.correctAnswer ?? '',
-        image: data.image ?? undefined,
-        video: data.video ?? undefined,
-        audio: data.audio ?? undefined,
-      }));
+      setTimerStarted(data.timerStarted ?? mode === 'auto');
+      setQuestion(toQuestionState(data, answerKey));
       setQuestionIndex(data.questionIndex);
       setTotalQuestions(data.total);
-      setAnswered([]);
-      const sec = data.timeSec ?? 15;
-      setTimeLeft(sec);
+      setTimeLeft(data.remainingSec ?? sec);
       setInitialQuestionTime(sec);
-      setPhase('question');
-    });
-    socket.on(SOCKET_EVENTS.QUESTION_TIMER_STARTED, ({ timeSec }) => {
-      const sec = timeSec ?? 15;
-      setTimerStarted(true);
-      setTimeLeft(sec);
-      setInitialQuestionTime(sec);
-    });
-    socket.on(SOCKET_EVENTS.QUESTION_HOST, ({ correctIndex, correctAnswer }) => {
-      setQuestion((prev) => (prev ? { ...prev, correctIndex: correctIndex ?? prev.correctIndex, correctAnswer: correctAnswer ?? prev.correctAnswer } : null));
-    });
-    socket.on(SOCKET_EVENTS.PLAYER_ANSWERED, ({ nickname, answerText }) => {
-      setAnswered((prev) => [...prev, { nickname, answerText }]);
-    });
-    socket.on(SOCKET_EVENTS.RESULTS, (data) => {
-      setResults(data);
-      setPhase('results');
-      if (data.roundOver) setShowRoundLeaderboard(false);
-    });
-    socket.on(SOCKET_EVENTS.ROUND_LEADERBOARD_SHOWN, () => setShowRoundLeaderboard(true));
-    socket.on(SOCKET_EVENTS.GAME_OVER, ({ leaderboard: lb }) => {
-      setLeaderboard(lb);
-      setPhase('gameover');
-    });
-    socket.on(SOCKET_EVENTS.HOST_DISCONNECT, () => setPhase('create'));
-    socket.on('disconnect', () => {
-      setPhase((p) => (p !== 'create' ? 'create' : p));
-      setRoomCode('');
-      setJoinUrl('');
-      setPlayers([]);
-      setQuestion(null);
-      setResults(null);
-      setLeaderboard([]);
-    });
+    };
+
+    const handlers = {
+      connect: () => {
+        const saved = loadHostSession();
+        if (saved) socket.emit(SOCKET_EVENTS.RESUME_SESSION, saved);
+      },
+      [SOCKET_EVENTS.ROOM_CREATED]: ({ code, joinUrl: url, token }) => {
+        saveHostSession({ code, token });
+        setRoomCode(code);
+        setJoinUrl(url);
+        setPhase('lobby');
+        setPlayers([]);
+        setNotice('');
+      },
+      [SOCKET_EVENTS.ROOM_ERROR]: ({ message }) => setNotice(message || 'Не удалось создать комнату'),
+      [SOCKET_EVENTS.SESSION_RESUMED]: (snapshot) => {
+        setRoomCode(snapshot.code);
+        setJoinUrl(snapshot.joinUrl);
+        setPlayers(snapshot.players);
+        setAnswered(snapshot.answered);
+        setResults(snapshot.results);
+        setLeaderboard(snapshot.leaderboard ?? []);
+        setShowRoundLeaderboard(snapshot.showRoundLeaderboard);
+        if (snapshot.question) applyQuestion(snapshot.question, snapshot.answerKey);
+        setPhase(PHASE_BY_STATE[snapshot.state]);
+      },
+      [SOCKET_EVENTS.SESSION_INVALID]: () => {
+        clearHostSession();
+        setPhase('create');
+      },
+      [SOCKET_EVENTS.SESSION_REPLACED]: () => setPhase('replaced'),
+      [SOCKET_EVENTS.PLAYER_JOINED]: ({ players: p }) => setPlayers(p),
+      [SOCKET_EVENTS.PLAYER_LEFT]: ({ players: p }) => setPlayers(p),
+      [SOCKET_EVENTS.GAME_STARTED]: () => setPhase('question'),
+      [SOCKET_EVENTS.PACK_LOAD_ERROR]: ({ message }) => setNotice(message || 'Пак не загружен'),
+      [SOCKET_EVENTS.QUESTION_START]: (data) => {
+        setShowRoundLeaderboard(false);
+        setAnswered([]);
+        applyQuestion(data, null);
+        setPhase('question');
+      },
+      [SOCKET_EVENTS.QUESTION_TIMER_STARTED]: ({ timeSec }) => {
+        const sec = timeSec ?? 15;
+        setTimerStarted(true);
+        setTimeLeft(sec);
+        setInitialQuestionTime(sec);
+      },
+      [SOCKET_EVENTS.QUESTION_HOST]: ({ correctIndex, correctAnswer }) => {
+        setQuestion((prev) => (prev ? { ...prev, correctIndex: correctIndex ?? prev.correctIndex, correctAnswer: correctAnswer ?? prev.correctAnswer } : null));
+      },
+      [SOCKET_EVENTS.PLAYER_ANSWERED]: ({ nickname, answerText }) => {
+        setAnswered((prev) => [...prev, { nickname, answerText }]);
+      },
+      [SOCKET_EVENTS.RESULTS]: (data) => {
+        setResults(data);
+        setPhase('results');
+        if (data.roundOver) setShowRoundLeaderboard(false);
+      },
+      [SOCKET_EVENTS.ROUND_LEADERBOARD_SHOWN]: () => setShowRoundLeaderboard(true),
+      [SOCKET_EVENTS.GAME_OVER]: ({ leaderboard: lb }) => {
+        setLeaderboard(lb);
+        setPhase('gameover');
+      },
+      [SOCKET_EVENTS.HOST_DISCONNECT]: () => {
+        clearHostSession();
+        setPhase('create');
+      },
+    };
+
+    for (const [event, handler] of Object.entries(handlers)) socket.on(event, handler);
+    if (socket.connected) handlers.connect();
     return () => {
-      socket.off(SOCKET_EVENTS.ROOM_CREATED);
-      socket.off(SOCKET_EVENTS.PLAYER_JOINED);
-      socket.off(SOCKET_EVENTS.PLAYER_LEFT);
-      socket.off(SOCKET_EVENTS.GAME_STARTED);
-      socket.off(SOCKET_EVENTS.QUESTION_START);
-      socket.off(SOCKET_EVENTS.QUESTION_TIMER_STARTED);
-      socket.off(SOCKET_EVENTS.QUESTION_HOST);
-      socket.off(SOCKET_EVENTS.PLAYER_ANSWERED);
-      socket.off(SOCKET_EVENTS.RESULTS);
-      socket.off(SOCKET_EVENTS.ROUND_LEADERBOARD_SHOWN);
-      socket.off(SOCKET_EVENTS.GAME_OVER);
-      socket.off('disconnect');
+      for (const [event, handler] of Object.entries(handlers)) socket.off(event, handler);
     };
   }, [socket]);
 
@@ -147,13 +173,19 @@ export default function Host() {
 
   const showResults = useCallback(() => {
     if (socket && question) {
-      socket.emit(SOCKET_EVENTS.SHOW_RESULTS, {
-        questionIndex,
-        correctIndex: question.correctIndex,
-        correctAnswer: question.correctAnswer,
-      });
+      socket.emit(SOCKET_EVENTS.SHOW_RESULTS);
     }
-  }, [socket, question, questionIndex]);
+  }, [socket, question]);
+
+  const endRoom = useCallback(() => {
+    if (!window.confirm('Завершить игру для всех участников?')) return;
+    if (socket) socket.emit(SOCKET_EVENTS.END_ROOM);
+    clearHostSession();
+    setRoomCode('');
+    setJoinUrl('');
+    setPlayers([]);
+    setPhase('create');
+  }, [socket]);
 
   const nextQuestion = useCallback(() => {
     if (socket) socket.emit(SOCKET_EVENTS.NEXT_QUESTION);
@@ -179,7 +211,8 @@ export default function Host() {
   if (!connected) {
     return (
       <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center gap-4 p-4 text-center max-w-md">
-        <p className="text-gray-400 font-bold">Нет связи с сервером</p>
+        <p className="text-gray-400 font-bold">Нет связи с сервером. Переподключаемся…</p>
+        <p className="text-gray-500 text-sm">Игра сохранена: комната ждёт вашего возвращения 5 минут.</p>
         {connectionError && (
           <div className="rounded-2xl bg-white/5 border border-white/10 p-4 text-left w-full">
             <p className="text-[#22d3ee] font-mono text-sm mb-2">Код: {connectionError.code}</p>
@@ -225,9 +258,25 @@ export default function Host() {
         </motion.div>
       )}
 
-      {packLoadError && (phase === 'lobby' || phase === 'question') && (
+      {phase === 'resuming' && (
+        <p className="relative z-10 text-center text-[#22d3ee] text-xl pt-20">Возвращаем в игру…</p>
+      )}
+
+      {phase === 'replaced' && (
+        <p className="relative z-10 text-center text-gray-300 text-xl pt-20">Игра открыта в другой вкладке или на другом устройстве.</p>
+      )}
+
+      {['lobby', 'question', 'results'].includes(phase) && (
+        <div className="relative z-20 flex justify-end mb-4">
+          <button type="button" onClick={endRoom} className="text-sm text-gray-500 hover:text-[#ef4444] transition-colors">
+            Завершить игру
+          </button>
+        </div>
+      )}
+
+      {notice && ['create', 'lobby', 'question'].includes(phase) && (
         <div className="relative z-20 mb-4 rounded-2xl bg-amber-500/20 border border-amber-500/50 px-4 py-3 text-amber-200 text-center">
-          {packLoadError}
+          {notice}
         </div>
       )}
       <AnimatePresence mode="wait">
@@ -276,8 +325,9 @@ export default function Host() {
               <ul className="space-y-2 mb-8">
                 {players.map((pl) => (
                   <li key={pl.id} className="text-lg text-gray-300 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[#22d3ee]" />
+                    <span className={`w-2 h-2 rounded-full ${pl.connected === false ? 'bg-gray-600' : 'bg-[#22d3ee]'}`} />
                     {pl.nickname}
+                    {pl.connected === false && <span className="text-sm text-gray-500">нет связи</span>}
                   </li>
                 ))}
               </ul>
@@ -303,7 +353,7 @@ export default function Host() {
             <div className="mb-6">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-gray-400">
-                  Вопрос {questionIndex + 1} из {totalQuestions}
+                  {question.roundTitle ? `${question.roundTitle} · ` : ''}Вопрос {questionIndex + 1} из {totalQuestions}
                 </span>
                 {timerMode === 'manual' && !timerStarted ? (
                   <motion.button
@@ -359,7 +409,7 @@ export default function Host() {
                     >
                       <div
                         className="w-12 h-12 rounded-xl flex items-center justify-center text-xl font-black text-white shrink-0"
-                        style={{ backgroundColor: ['#ef4444', '#3b82f6', '#10b981', '#fbbf24', '#a855f7', '#ec4899', '#14b8a6', '#f59e0b', '#6366f1', '#84cc16'][i % 10] }}
+                        style={{ backgroundColor: ANSWER_COLORS[i % ANSWER_COLORS.length] }}
                       >
                         {LETTERS[i] ?? i + 1}
                       </div>
@@ -405,7 +455,7 @@ export default function Host() {
             {results.roundOver ? (
               showRoundLeaderboard ? (
                 <>
-                  <h2 className="text-3xl font-black text-[#a855f7] mb-2">Итоги раунда {results.roundNumber ?? 1}</h2>
+                  <h2 className="text-3xl font-black text-[#a855f7] mb-2">Итоги раунда {results.roundTitle || (results.roundNumber ?? 1)}</h2>
                   <h3 className="text-2xl font-black text-white mb-6">Таблица лидеров</h3>
                   <ul className="space-y-3 mb-10">
                     {(results.roundLeaderboard ?? results.playerScores ?? []).map((item, i) => (
@@ -511,6 +561,8 @@ export default function Host() {
             </ul>
             <motion.button
               onClick={() => {
+                if (socket) socket.emit(SOCKET_EVENTS.END_ROOM);
+                clearHostSession();
                 setPhase('create');
                 setRoomCode('');
                 setJoinUrl('');

@@ -1,11 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import Client from './Client';
+import { SOCKET_EVENTS } from '../constants';
+
+const mockSocket = vi.hoisted(() => ({ current: null }));
 
 vi.mock('../hooks/useSocket', () => ({
   useSocket: () => ({
-    socket: { emit: vi.fn(), on: vi.fn(), off: vi.fn() },
+    socket: mockSocket.current,
     connected: true,
     retry: vi.fn(),
   }),
@@ -22,6 +25,8 @@ function renderClient() {
 describe('Client', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
+    mockSocket.current = { emit: vi.fn(), on: vi.fn(), off: vi.fn() };
   });
 
   it('shows join form with labels linked to inputs', () => {
@@ -44,5 +49,75 @@ describe('Client', () => {
     renderClient();
     expect(screen.getByText(/BOX/)).toBeInTheDocument();
     expect(screen.getByText(/PARTY/)).toBeInTheDocument();
+  });
+});
+
+describe('Client: игра', () => {
+  const makeSocket = () => {
+    const handlers = {};
+    return {
+      handlers,
+      connected: true,
+      emit: vi.fn(),
+      on: vi.fn((event, handler) => { handlers[event] = handler; }),
+      off: vi.fn(),
+    };
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+    mockSocket.current = makeSocket();
+  });
+
+  it('показывает буквы для всех вариантов, а не только A-D', async () => {
+    renderClient();
+    act(() => mockSocket.current.handlers[SOCKET_EVENTS.QUESTION_START]({
+      questionIndex: 0,
+      total: 1,
+      type: 'choice',
+      question: 'Какой?',
+      options: ['1', '2', '3', '4', '5', '6'],
+      timeSec: 15,
+    }));
+    for (const letter of ['A', 'B', 'C', 'D', 'E', 'F']) {
+      expect(await screen.findByText(letter)).toBeInTheDocument();
+    }
+  });
+
+  it('при входе запоминает сессию, при обновлении страницы запрашивает возврат', () => {
+    const first = render(<BrowserRouter><Client /></BrowserRouter>);
+    expect(mockSocket.current.emit).not.toHaveBeenCalled();
+    act(() => mockSocket.current.handlers[SOCKET_EVENTS.JOIN_SUCCESS]({ code: 'ABCD', token: 't-1' }));
+    first.unmount();
+
+    mockSocket.current = makeSocket();
+    renderClient();
+    expect(mockSocket.current.emit).toHaveBeenCalledWith(SOCKET_EVENTS.RESUME_SESSION, { code: 'ABCD', token: 't-1' });
+    expect(screen.getByText('Возвращаем в игру…')).toBeInTheDocument();
+  });
+
+  it('после возврата показывает вопрос и уже отправленный ответ', () => {
+    localStorage.setItem('box.playerSession', JSON.stringify({ code: 'ABCD', token: 't-1' }));
+    renderClient();
+    act(() => mockSocket.current.handlers[SOCKET_EVENTS.SESSION_RESUMED]({
+      code: 'ABCD',
+      nickname: 'Аня',
+      state: 'QUESTION',
+      hostConnected: false,
+      showRoundLeaderboard: false,
+      myAnswer: 1,
+      question: { questionIndex: 0, total: 1, type: 'choice', question: 'Какой?', options: ['1', '2'], timeSec: 15, remainingSec: 7, timerStarted: true },
+    }));
+    expect(screen.getByText('Какой?')).toBeInTheDocument();
+    expect(screen.getByText('Ответ принят!')).toBeInTheDocument();
+    expect(screen.getByText(/Ведущий потерял связь/)).toBeInTheDocument();
+  });
+
+  it('недействительная сессия очищается и открывается форма входа', () => {
+    localStorage.setItem('box.playerSession', JSON.stringify({ code: 'ABCD', token: 't-1' }));
+    renderClient();
+    act(() => mockSocket.current.handlers[SOCKET_EVENTS.SESSION_INVALID]());
+    expect(localStorage.getItem('box.playerSession')).toBeNull();
+    expect(screen.getByLabelText('Код комнаты')).toBeInTheDocument();
   });
 });

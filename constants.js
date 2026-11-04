@@ -1,11 +1,13 @@
 /**
- * Общие константы игры (используются сервером и клиентом)
+ * Общие константы игры (единственный источник: сервер импортирует их напрямую,
+ * клиент реэкспортирует через client/src/constants.js)
  */
 
 export const GAME_STATES = {
   LOBBY: 'LOBBY',
   QUESTION: 'QUESTION',
   RESULTS: 'RESULTS',
+  GAME_OVER: 'GAME_OVER',
 };
 
 export const ROOM_CODE_LENGTH = 4;
@@ -16,11 +18,20 @@ export const SOCKET_EVENTS = {
   // Комната
   CREATE_ROOM: 'create_room',
   ROOM_CREATED: 'room_created',
+  ROOM_ERROR: 'room_error',
   JOIN_ROOM: 'join_room',
   JOIN_SUCCESS: 'join_success',
   JOIN_ERROR: 'join_error',
   PLAYER_JOINED: 'player_joined',
   PLAYER_LEFT: 'player_left',
+  END_ROOM: 'end_room',
+
+  // Возврат в игру после обрыва связи
+  RESUME_SESSION: 'resume_session',
+  SESSION_RESUMED: 'session_resumed',
+  SESSION_INVALID: 'session_invalid',
+  SESSION_REPLACED: 'session_replaced',
+  HOST_STATUS: 'host_status',
 
   // Игра
   START_GAME: 'start_game',

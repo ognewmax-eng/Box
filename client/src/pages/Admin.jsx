@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
+import { ANSWER_LETTERS } from '../constants';
 
-const LETTERS = 'ABCDEFGHIJ'.split('');
+const LETTERS = ANSWER_LETTERS;
+const PASSWORD_KEY = 'box.adminPassword';
 const MAX_ROUNDS = 10;
 const MAX_QUESTIONS_PER_ROUND = 10;
 const MAX_CHOICE_OPTIONS = 10;
+
+const normalizePackId = (id) => id.trim().toLowerCase().replace(/\s+/g, '-');
 
 const emptyQuestion = (type = 'choice') => ({
   type,
@@ -23,6 +27,44 @@ export default function Admin() {
   const [form, setForm] = useState({ id: '', title: '', answerTimeSec: 15, rounds: [{ questions: [emptyQuestion()], timerStart: 'auto' }] });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [password, setPassword] = useState(() => sessionStorage.getItem(PASSWORD_KEY) || '');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [authorized, setAuthorized] = useState(false);
+
+  const logout = (reason) => {
+    sessionStorage.removeItem(PASSWORD_KEY);
+    setPassword('');
+    setAuthorized(false);
+    setMessage(reason);
+  };
+
+  const adminFetch = async (url, options = {}) => {
+    const res = await fetch(url, {
+      ...options,
+      headers: { ...options.headers, 'X-Admin-Password': password },
+    });
+    if (res.status === 401) {
+      logout('Неверный пароль');
+      throw new Error('Неверный пароль');
+    }
+    return res;
+  };
+
+  useEffect(() => {
+    if (!password) return;
+    adminFetch('/api/admin/check')
+      .then((res) => {
+        if (res.status === 429) {
+          logout('Слишком много попыток, подождите минуту');
+          return;
+        }
+        if (!res.ok) throw new Error();
+        sessionStorage.setItem(PASSWORD_KEY, password);
+        setAuthorized(true);
+        setMessage('');
+      })
+      .catch(() => {});
+  }, [password]);
 
   const loadPacks = () => {
     fetch('/api/packs')
@@ -31,7 +73,9 @@ export default function Admin() {
       .catch(() => setPacks([]));
   };
 
-  useEffect(() => loadPacks(), []);
+  useEffect(() => {
+    if (authorized) loadPacks();
+  }, [authorized]);
 
   const addRound = () => {
     if (form.rounds.length >= MAX_ROUNDS) return;
@@ -115,9 +159,10 @@ export default function Admin() {
   const uploadMedia = (roundIndex, questionIndex, field, e) => {
     const file = e.target?.files?.[0];
     if (!file || !form.id?.trim()) return;
+    setMessage('');
     const fd = new FormData();
     fd.append('file', file);
-    fetch(`/api/packs/${encodeURIComponent(form.id.trim())}/media`, { method: 'POST', body: fd })
+    adminFetch(`/api/packs/${encodeURIComponent(normalizePackId(form.id))}/media`, { method: 'POST', body: fd })
       .then((r) => r.json())
       .then((data) => {
         if (data.path) updateQuestion(roundIndex, questionIndex, field, data.path);
@@ -133,29 +178,13 @@ export default function Admin() {
       setMessage('Заполните ID и название');
       return;
     }
-    const id = form.id.trim().toLowerCase().replace(/\s+/g, '-');
+    const id = normalizePackId(form.id);
+    // Проверку вариантов и индекса правильного ответа делает сервер: ошибку он вернёт текстом
     const rounds = form.rounds
       .map((r) => ({
-        timerStart: (r.timerStart === 'manual' || r.timerStart === 'on_host') ? 'manual' : 'auto',
-        questions: r.questions
-          .filter((q) => q.question.trim())
-          .map((q) => {
-            const media = {};
-            if (q.image?.trim()) media.image = q.image.trim();
-            if (q.video?.trim()) media.video = q.video.trim();
-            if (q.audio?.trim()) media.audio = q.audio.trim();
-            if (q.type === 'open') {
-              return { type: 'open', question: q.question.trim(), correctAnswer: (q.correctAnswer || '').trim(), ...media };
-            }
-            const options = (q.options || []).map((o) => o.trim()).filter(Boolean);
-            return {
-              type: 'choice',
-              question: q.question.trim(),
-              options: options.length ? options : ['A', 'B', 'C', 'D'],
-              correctIndex: Math.max(0, Math.min(Number(q.correctIndex) || 0, options.length - 1)),
-              ...media,
-            };
-          }),
+        timerStart: r.timerStart === 'manual' ? 'manual' : 'auto',
+        roundTitle: r.roundTitle?.trim() || undefined,
+        questions: r.questions.filter((q) => q.question.trim()),
       }))
       .filter((r) => r.questions.length > 0);
     if (rounds.length === 0) {
@@ -165,7 +194,7 @@ export default function Admin() {
     setSaving(true);
     setMessage('');
     try {
-      const res = await fetch('/api/packs', {
+      const res = await adminFetch('/api/packs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, title: form.title.trim(), answerTimeSec: form.answerTimeSec, rounds }),
@@ -192,7 +221,7 @@ export default function Admin() {
   const startEdit = (pack) => {
     if (!pack?.id) return;
     const id = encodeURIComponent(pack.id);
-    fetch(`/api/packs/${id}`)
+    adminFetch(`/api/packs/${id}`)
       .then((r) => {
         if (!r.ok) {
           setMessage(r.status === 404 ? 'Пак не найден' : 'Не удалось загрузить пак');
@@ -206,6 +235,7 @@ export default function Admin() {
         if (Array.isArray(data.rounds) && data.rounds.length > 0) {
           rounds = data.rounds.map((r) => ({
             timerStart: (r.timerStart === 'manual' || r.timerStart === 'on_host') ? 'manual' : 'auto',
+            roundTitle: r.roundTitle ?? '',
             questions: (r.questions || []).map((q) => ({
               type: q.type === 'open' ? 'open' : 'choice',
               question: q.question || '',
@@ -243,6 +273,37 @@ export default function Admin() {
 
   const totalQuestions = form.rounds.reduce((acc, r) => acc + r.questions.length, 0);
 
+  if (!authorized) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0f] text-white flex items-center justify-center p-6">
+        <form
+          className="w-full max-w-sm rounded-3xl bg-white/5 border border-white/10 p-8 space-y-5"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setMessage('');
+            setPassword(passwordInput);
+          }}
+        >
+          <h1 className="text-2xl font-black">BOX <span className="text-[#a855f7]">PARTY</span> — Админка</h1>
+          <div>
+            <label htmlFor="admin-password" className="block text-gray-400 text-sm mb-2">Пароль</label>
+            <input
+              id="admin-password"
+              type="password"
+              autoFocus
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              className="w-full rounded-xl bg-white/5 border-2 border-white/10 px-4 py-3 text-white focus:border-[#a855f7] outline-none"
+            />
+            <p className="text-gray-500 text-xs mt-2">Пароль показан в окне сервера при запуске и хранится в файле .admin-password.</p>
+          </div>
+          {message && <p className="text-[#ef4444] text-sm">{message}</p>}
+          <button type="submit" disabled={!passwordInput} className="w-full py-3 rounded-2xl bg-gradient-to-r from-[#a855f7] to-[#7c3aed] font-black disabled:opacity-50">Войти</button>
+        </form>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white p-6 md:p-10 relative overflow-hidden">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -253,7 +314,7 @@ export default function Admin() {
         <h1 className="text-4xl font-black text-white mb-2">
           BOX <span className="text-[#a855f7]">PARTY</span> — Админка
         </h1>
-        <p className="text-gray-400 mb-8">Пак: до {MAX_ROUNDS} раундов, до {MAX_QUESTIONS_PER_ROUND} вопросов в раунде. Тип: выбор ответа или открытый (сравнение без учёта регистра).</p>
+        <p className="text-gray-400 mb-8">Пак: до {MAX_ROUNDS} раундов, до {MAX_QUESTIONS_PER_ROUND} вопросов в раунде. Тип: выбор ответа или открытый (регистр, ё/е и знаки препинания не важны).</p>
 
         {message && (
           <motion.p className="mb-6 p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -308,7 +369,10 @@ export default function Admin() {
                   {form.rounds.map((round, ri) => (
                     <div key={ri} className="rounded-2xl bg-white/5 p-4 border border-white/10">
                       <div className="flex flex-wrap justify-between items-center gap-2 mb-3">
-                        <span className="text-[#a855f7] font-bold">Раунд {ri + 1}</span>
+                        <div className="flex items-center gap-2 flex-1 min-w-[12rem]">
+                          <span className="text-[#a855f7] font-bold whitespace-nowrap">Раунд {ri + 1}</span>
+                          <input type="text" value={round.roundTitle ?? ''} onChange={(e) => updateRound(ri, 'roundTitle', e.target.value)} placeholder="Название (необязательно)" className="flex-1 min-w-0 rounded-lg bg-white/5 border border-white/10 px-2 py-1 text-white text-sm" />
+                        </div>
                         <div className="flex flex-wrap items-center gap-2">
                           <label className="text-gray-400 text-sm flex items-center gap-1">
                             Таймер:
@@ -355,7 +419,7 @@ export default function Admin() {
                             ))}
                           </div>
                           {q.type === 'open' ? (
-                            <input type="text" value={q.correctAnswer ?? ''} onChange={(e) => updateQuestion(ri, qi, 'correctAnswer', e.target.value)} placeholder="Правильный ответ (сравнение без учёта регистра)" className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white text-sm focus:border-[#a855f7] outline-none" />
+                            <input type="text" value={q.correctAnswer ?? ''} onChange={(e) => updateQuestion(ri, qi, 'correctAnswer', e.target.value)} placeholder="Правильный ответ (регистр, ё/е и знаки не важны)" className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white text-sm focus:border-[#a855f7] outline-none" />
                           ) : (
                             <>
                               {(() => { const base = q.options || ['', '', '', '']; const opts = [...base.slice(0, MAX_CHOICE_OPTIONS)]; while (opts.length < MAX_CHOICE_OPTIONS) opts.push(''); return opts; })().map((opt, oi) => (
