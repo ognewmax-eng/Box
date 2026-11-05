@@ -25,6 +25,9 @@ export const SOCKET_EVENTS = {
   PLAYER_JOINED: 'player_joined',
   PLAYER_LEFT: 'player_left',
   END_ROOM: 'end_room',
+  SELECT_PACK: 'select_pack',
+  PEEK_ROOM: 'peek_room',
+  ROOM_THEME: 'room_theme',
 
   // Возврат в игру после обрыва связи
   RESUME_SESSION: 'resume_session',

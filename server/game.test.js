@@ -1,5 +1,7 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'fs';
+import { join } from 'path';
 import { SOCKET_EVENTS as EV } from '../constants.js';
 import { buildJoinUrl } from './network.js';
 import { normalizeAnswer } from './packs.js';
@@ -101,6 +103,83 @@ describe('игровой цикл', () => {
     } finally {
       await fast.stop();
     }
+  });
+});
+
+describe('оформление игры', () => {
+  let server;
+  before(async () => {
+    server = await startTestServer();
+    fs.writeFileSync(join(server.appRoot, 'games', 'north.json'), JSON.stringify({
+      title: 'Север',
+      theme: { preset: 'tundra', texts: { pointsLabel: 'Олени' }, evil: 'x' },
+      rounds: [{ questions: [{ type: 'choice', question: 'Q', options: ['a', 'b'], correctIndex: 1 }] }],
+    }));
+  });
+  after(() => server.stop());
+
+  it('выбор пака перекрашивает телефоны в лобби, тема есть при входе и возврате', async () => {
+    const { host, code } = await createRoom(server);
+    const early = await joinPlayer(server, code, 'Первый');
+    const themed = once(early.socket, EV.ROOM_THEME);
+    host.emit(EV.SELECT_PACK, { packId: 'north' });
+    const update = await themed;
+    assert.equal(update.title, 'Север');
+    assert.deepEqual(update.theme, { preset: 'tundra', texts: { pointsLabel: 'Олени' } });
+
+    // Форма входа: тема по коду, ещё без входа в комнату
+    const visitor = await server.connect();
+    visitor.emit(EV.PEEK_ROOM, { code });
+    assert.equal((await once(visitor, EV.ROOM_THEME)).theme.preset, 'tundra');
+
+    const late = await server.connect();
+    late.emit(EV.JOIN_ROOM, { code, nickname: 'Второй' });
+    assert.equal((await once(late, EV.JOIN_SUCCESS)).theme.preset, 'tundra');
+
+    // Старт без packId использует выбранный пак
+    const question = once(host, EV.QUESTION_START);
+    host.emit(EV.START_GAME, {});
+    assert.equal((await question).question, 'Q');
+
+    late.emit(EV.SUBMIT_ANSWER, { answerIndex: 1 });
+    early.socket.emit(EV.SUBMIT_ANSWER, { answerIndex: 0 });
+    await once(host, EV.PLAYER_ANSWERED);
+    await once(host, EV.PLAYER_ANSWERED);
+    const results = once(host, EV.RESULTS);
+    host.emit(EV.SHOW_RESULTS);
+    const r = await results;
+    assert.deepEqual(r.answerCounts, [1, 1]);
+    assert.deepEqual(r.correctNicknames, ['Второй']);
+
+    const back = await server.connect();
+    back.emit(EV.RESUME_SESSION, { code, token: early.token });
+    const snapshot = await once(back, EV.SESSION_RESUMED);
+    assert.equal(snapshot.theme.preset, 'tundra');
+    assert.equal(snapshot.title, 'Север');
+    assert.equal(snapshot.results.correctNicknames[0], 'Второй');
+  });
+
+  it('снятие пака возвращает базовое оформление, игрок не может менять пак', async () => {
+    const { host, code } = await createRoom(server);
+    const player = await joinPlayer(server, code, 'Игрок');
+    let selected = once(player.socket, EV.ROOM_THEME);
+    host.emit(EV.SELECT_PACK, { packId: 'north' });
+    await selected;
+
+    player.socket.emit(EV.SELECT_PACK, { packId: null });
+    await sleep(40);
+    assert.equal(server.rooms.get(code).theme.preset, 'tundra');
+
+    selected = once(player.socket, EV.ROOM_THEME);
+    host.emit(EV.SELECT_PACK, { packId: null });
+    assert.deepEqual(await selected, { theme: null, title: null });
+  });
+
+  it('выбор несуществующего пака и путь за пределы папки дают ошибку', async () => {
+    const { host } = await createRoom(server);
+    const error = once(host, EV.PACK_LOAD_ERROR);
+    host.emit(EV.SELECT_PACK, { packId: '../secret' });
+    await error;
   });
 });
 
