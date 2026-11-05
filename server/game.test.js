@@ -141,10 +141,17 @@ describe('оформление игры', () => {
     host.emit(EV.START_GAME, {});
     assert.equal((await question).question, 'Q');
 
+    // Подписка до отправки: второй ответ может прийти сразу за первым
+    const bothAnswered = new Promise((resolve) => {
+      let count = 0;
+      host.on(EV.PLAYER_ANSWERED, () => {
+        count += 1;
+        if (count === 2) resolve();
+      });
+    });
     late.emit(EV.SUBMIT_ANSWER, { answerIndex: 1 });
     early.socket.emit(EV.SUBMIT_ANSWER, { answerIndex: 0 });
-    await once(host, EV.PLAYER_ANSWERED);
-    await once(host, EV.PLAYER_ANSWERED);
+    await bothAnswered;
     const results = once(host, EV.RESULTS);
     host.emit(EV.SHOW_RESULTS);
     const r = await results;
