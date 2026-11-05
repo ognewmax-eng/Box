@@ -122,6 +122,12 @@ export function PlayerResultView({ results, nickname, answered, showRoundLeaderb
     return <PlayerLeaderboardView heading={`Итоги раунда: ${results.roundTitle || results.roundNumber}`} entries={results.roundLeaderboard ?? scores} nickname={nickname} />;
   }
 
+  if (results?.answersHidden) {
+    return (
+      <PlayerMessageView message={answered ? 'Ответ записан. Правильные ответы будут в конце игры.' : 'Время вышло, ответ не записан.'} />
+    );
+  }
+
   const tone = isCorrect
     ? { bg: 'var(--t-good)', fg: 'var(--t-on-good)', title: theme.texts.correctText, Icon: Check }
     : answered

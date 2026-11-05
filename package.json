@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Локальная мультиплеерная Party Game платформа (как Jackbox)",
   "type": "module",
-  "main": "server.js",
+  "main": "electron/main.js",
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "node server.js",
@@ -11,9 +11,10 @@
     "build": "cd client && npm run build",
     "start": "npm run build && node server.js",
     "tunnel": "npm run build && concurrently -n s,t \"node server.js\" \"npx localtunnel --port 3000\"",
-    "test": "node server.constants.test.js && node --test server/game.test.js server/http.test.js scripts/check-deps.test.js && cd client && npm run test",
-    "build:pkg": "node scripts/build-pkg.js",
-    "build:pkg:win": "node scripts/build-pkg-win.js"
+    "test": "node server.constants.test.js && node --test server/game.test.js server/http.test.js scripts/check-deps.test.js server/starter-packs.test.js && cd client && npm run test",
+    "app": "npm run build && electron .",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:win": "npm run build && electron-builder --win"
   },
   "dependencies": {
     "express": "^4.21.0",
@@ -23,11 +24,93 @@
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
-    "esbuild": "^0.24.0",
-    "pkg": "^5.8.0",
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0",
     "socket.io-client": "^4.8.4"
   },
   "engines": {
     "node": ">=20.19"
+  },
+  "productName": "Box Party",
+  "author": "Box Party",
+  "build": {
+    "appId": "com.boxparty.game",
+    "productName": "Box Party",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**",
+      "server/**",
+      "!server/*.test.js",
+      "!server/test-helpers.js",
+      "constants.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "client/dist",
+        "to": "client-dist"
+      },
+      {
+        "from": "games",
+        "to": "games",
+        "filter": [
+          "flags.json",
+          "movies.json",
+          "road-signs.json",
+          "school.json",
+          "space.json",
+          "yamall.json",
+          "sample.json",
+          "media/flags/**",
+          "media/movies/**",
+          "media/road-signs/**",
+          "media/school/**",
+          "media/space/**"
+        ]
+      }
+    ],
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "category": "public.app-category.games",
+      "identity": "-",
+      "extendInfo": {
+        "NSLocalNetworkUsageDescription": "Игрокам нужно подключаться к игре с телефонов по Wi-Fi."
+      },
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "title": "Box Party"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "artifactName": "${productName}-${version}-setup.${ext}",
+      "language": "1049"
+    },
+    "publish": null
   }
 }

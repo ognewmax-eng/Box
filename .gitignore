@@ -1,19 +1,9 @@
 node_modules
 
-# Сборка pkg (папка Builds остаётся, артефакты — нет)
-Builds/BoxParty
-Builds/client
-Builds/games
-Builds/server-cjs.cjs
-
-Builds-Windows/BoxParty.exe
-Builds-Windows/client
-Builds-Windows/games
-Builds-Windows/server-cjs.cjs
-
 # Зависимости и результаты сборки
 client/node_modules
 client/dist
+release
 *.zip
 .DS_Store
 

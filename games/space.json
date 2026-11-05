@@ -1,0 +1,203 @@
+{
+  "title": "Космос",
+  "answerTimeSec": 20,
+  "theme": {
+    "preset": "arcade",
+    "fonts": {
+      "display": "rubik"
+    },
+    "texts": {
+      "pointsLabel": "Звёзды",
+      "correctText": "Есть контакт",
+      "wrongText": "Мимо орбиты",
+      "finalTitle": "Экипаж лучших"
+    }
+  },
+  "rounds": [
+    {
+      "timerStart": "auto",
+      "roundTitle": "Планеты",
+      "questions": [
+        {
+          "type": "choice",
+          "question": "Какая это планета?",
+          "options": [
+            "Юпитер",
+            "Сатурн",
+            "Уран",
+            "Нептун"
+          ],
+          "correctIndex": 1,
+          "image": "space/saturn.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Какая планета с Большим красным пятном — самая большая в Солнечной системе?",
+          "options": [
+            "Сатурн",
+            "Нептун",
+            "Юпитер",
+            "Венера"
+          ],
+          "correctIndex": 2,
+          "image": "space/jupiter.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Какую планету называют Красной?",
+          "options": [
+            "Венера",
+            "Меркурий",
+            "Нептун",
+            "Марс"
+          ],
+          "correctIndex": 3,
+          "image": "space/mars.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Какая планета ближе всего к Солнцу?",
+          "options": [
+            "Меркурий",
+            "Венера",
+            "Земля",
+            "Марс"
+          ],
+          "correctIndex": 0,
+          "image": "space/mercury.svg"
+        },
+        {
+          "type": "open",
+          "question": "Как называется наша галактика?",
+          "correctAnswer": "Млечный Путь",
+          "image": "space/galaxy.svg"
+        }
+      ]
+    },
+    {
+      "timerStart": "auto",
+      "roundTitle": "Звёздное небо",
+      "questions": [
+        {
+          "type": "choice",
+          "question": "Часть какого созвездия этот знаменитый ковш?",
+          "options": [
+            "Малая Медведица",
+            "Большая Медведица",
+            "Лебедь",
+            "Орион"
+          ],
+          "correctIndex": 1,
+          "image": "space/dipper.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Какое созвездие легко узнать по трём звёздам «пояса»?",
+          "options": [
+            "Орион",
+            "Кассиопея",
+            "Лира",
+            "Лебедь"
+          ],
+          "correctIndex": 0,
+          "image": "space/orion.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Какое созвездие похоже на букву W?",
+          "options": [
+            "Дракон",
+            "Андромеда",
+            "Кассиопея",
+            "Пегас"
+          ],
+          "correctIndex": 2,
+          "image": "space/cassiopeia.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Как называется фаза, когда виден весь диск Луны?",
+          "options": [
+            "Новолуние",
+            "Первая четверть",
+            "Последняя четверть",
+            "Полнолуние"
+          ],
+          "correctIndex": 3,
+          "image": "space/fullmoon.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Что это за небесное тело с хвостом?",
+          "options": [
+            "Астероид",
+            "Комета",
+            "Метеорит",
+            "Спутник"
+          ],
+          "correctIndex": 1,
+          "image": "space/comet.svg"
+        }
+      ]
+    },
+    {
+      "timerStart": "manual",
+      "roundTitle": "Покорение космоса",
+      "questions": [
+        {
+          "type": "choice",
+          "question": "В каком году запустили первый искусственный спутник Земли?",
+          "options": [
+            "1947",
+            "1957",
+            "1961",
+            "1969"
+          ],
+          "correctIndex": 1,
+          "image": "space/sputnik.svg"
+        },
+        {
+          "type": "open",
+          "question": "Назовите фамилию первого человека, полетевшего в космос.",
+          "correctAnswer": "Гагарин",
+          "image": "space/rocket.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Кто первым вышел в открытый космос?",
+          "options": [
+            "Юрий Гагарин",
+            "Герман Титов",
+            "Алексей Леонов",
+            "Нил Армстронг"
+          ],
+          "correctIndex": 2,
+          "image": "space/spacewalk.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Кто первым ступил на поверхность Луны?",
+          "options": [
+            "Нил Армстронг",
+            "Базз Олдрин",
+            "Майкл Коллинз",
+            "Юрий Гагарин"
+          ],
+          "correctIndex": 0,
+          "image": "space/moonflag.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Как зовут первую женщину-космонавта?",
+          "options": [
+            "Светлана Савицкая",
+            "Елена Кондакова",
+            "Салли Райд",
+            "Валентина Терешкова"
+          ],
+          "correctIndex": 3
+        }
+      ]
+    }
+  ]
+}

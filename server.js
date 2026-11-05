@@ -5,10 +5,7 @@ import { randomBytes } from 'crypto';
 import { createGameServer } from './server/app.js';
 import { getLANIP, getLocalIPs } from './server/network.js';
 
-// В CJS-бандле (pkg) import.meta.url отсутствует: файлы лежат рядом с исполняемым файлом
-const moduleUrl = typeof import.meta !== 'undefined' ? import.meta.url : undefined;
-const defaultRoot = moduleUrl ? dirname(fileURLToPath(moduleUrl)) : dirname(process.execPath);
-const appRoot = process.env.APP_ROOT || defaultRoot;
+const appRoot = process.env.APP_ROOT || dirname(fileURLToPath(import.meta.url));
 
 // Пароль админки: из ADMIN_PASSWORD, иначе создаётся один раз и хранится рядом с игрой
 function resolveAdminPassword() {

@@ -77,6 +77,7 @@ export const DEFAULT_TEXTS = {
 };
 
 export const DEFAULT_OPTIONS = {
+  showAnswers: true,
   showAnswerCounts: true,
   showAnswererNames: true,
   showLeaderboardOnPhones: true,

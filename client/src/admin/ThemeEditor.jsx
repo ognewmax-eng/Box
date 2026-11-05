@@ -85,7 +85,7 @@ function ImageField({ label, value, onUpload, onClear }) {
       <div className="flex flex-col items-start gap-1 text-sm">
         <span className="font-bold">{label}</span>
         <span className="flex gap-3">
-          <label className="cursor-pointer underline underline-offset-2">
+          <label className="relative cursor-pointer underline underline-offset-2">
             Загрузить
             <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="sr-only" onChange={onUpload} />
           </label>

@@ -34,6 +34,15 @@ function leaderboardOf(room) {
     .sort((a, b) => b.score - a.score);
 }
 
+// Разбор в конце игры: если ответы не показывали по ходу, зал всё равно должен их узнать
+function answerReviewOf(room) {
+  if (room.showAnswers) return undefined;
+  return room.questions.map((q) => ({
+    question: q.question,
+    answer: q.type === 'open' ? q.correctAnswer : q.options[q.correctIndex],
+  }));
+}
+
 function questionPayload(room, opts) {
   const q = room.questions[room.currentQuestionIndex];
   if (!q) return null;
@@ -78,6 +87,7 @@ function buildSnapshot(room, role, player, opts) {
     results: room.state === GAME_STATES.RESULTS ? room.lastResults : null,
     showRoundLeaderboard: room.roundLeaderboardShown,
     leaderboard: room.state === GAME_STATES.GAME_OVER ? leaderboardOf(room) : null,
+    answerReview: room.state === GAME_STATES.GAME_OVER ? answerReviewOf(room) : undefined,
   };
   if (role === 'host') {
     return {
@@ -165,7 +175,19 @@ export function registerGame(io, { gamesDir, lanIp, port, ...overrides }) {
     const sorted = leaderboardOf(room);
     const roundPosition = room.roundEndIndices.indexOf(room.currentQuestionIndex);
     const roundOver = roundPosition !== -1;
-    room.lastResults = {
+    const hiddenResults = {
+      questionIndex: room.currentQuestionIndex,
+      type: question.type,
+      answersHidden: true,
+      answeredCount: room.answers.size,
+      // Счёт после каждого вопроса выдал бы правильный ответ, поэтому таблица только в конце раунда
+      playerScores: [],
+      roundOver,
+      roundNumber: roundOver ? roundPosition + 1 : 0,
+      roundTitle: roundOver ? room.roundTitles?.[roundPosition] || undefined : undefined,
+      roundLeaderboard: roundOver ? sorted : undefined,
+    };
+    room.lastResults = !room.showAnswers ? hiddenResults : {
       questionIndex: room.currentQuestionIndex,
       type: question.type,
       correctIndex: isOpen ? undefined : question.correctIndex,
@@ -231,6 +253,7 @@ export function registerGame(io, { gamesDir, lanIp, port, ...overrides }) {
       questionRounds: [0],
       roundTitles: [''],
       answerTimeSec: QUESTION_TIME_SEC,
+      showAnswers: true,
     };
   }
 
@@ -305,7 +328,7 @@ export function registerGame(io, { gamesDir, lanIp, port, ...overrides }) {
         hostSocketId: socket.id,
         hostConnected: true,
         hostTimer: null,
-        joinUrl: buildJoinUrl(joinBaseUrl, code, lanIp, port),
+        joinUrl: buildJoinUrl(joinBaseUrl, code, typeof lanIp === 'function' ? lanIp() : lanIp, typeof port === 'function' ? port() : port),
         players: new Map(),
         scores: new Map(),
         answers: new Map(),
@@ -316,6 +339,7 @@ export function registerGame(io, { gamesDir, lanIp, port, ...overrides }) {
         questionRounds: [],
         roundTitles: [],
         answerTimeSec: QUESTION_TIME_SEC,
+        showAnswers: true,
         currentQuestionIndex: 0,
         timerStarted: false,
         deadline: null,
@@ -503,7 +527,7 @@ export function registerGame(io, { gamesDir, lanIp, port, ...overrides }) {
         return;
       }
       room.state = GAME_STATES.GAME_OVER;
-      io.to(room.code).emit(EV.GAME_OVER, { leaderboard: leaderboardOf(room) });
+      io.to(room.code).emit(EV.GAME_OVER, { leaderboard: leaderboardOf(room), answerReview: answerReviewOf(room) });
     });
 
     on(EV.HOST_SHOW_ROUND_LEADERBOARD, () => {

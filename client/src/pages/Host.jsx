@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import ThemeStage from '../theme/ThemeStage';
 import { ConnectionLost, Wordmark } from '../components/ui';
 import { HostFinalView, HostLeaderboardView, HostLobbyView, HostQuestionView } from '../views/host';
@@ -20,7 +21,10 @@ function HostContent({ game }) {
           <Wordmark size="tv-xl" />
           <p className="tv-lg max-w-[26ch]">Создайте комнату, покажите код на большом экране, и игроки войдут с телефонов.</p>
           {game.notice && <p className="tv-md font-bold">{game.notice}</p>}
-          <button type="button" onClick={game.createRoom} className="btn tv-lg">Создать комнату</button>
+          <div className="flex flex-wrap items-center gap-[min(2cqw,3.5cqh)]">
+            <button type="button" onClick={game.createRoom} className="btn tv-lg">Создать комнату</button>
+            <Link to="/admin" className="tv-md font-bold underline underline-offset-4">Создать игру и настроить её вид</Link>
+          </div>
         </div>
       );
     case 'lobby':
@@ -72,7 +76,7 @@ function HostContent({ game }) {
         />
       );
     case 'gameover':
-      return <HostFinalView title={game.title} leaderboard={game.leaderboard} onNewRoom={game.newRoom} />;
+      return <HostFinalView title={game.title} leaderboard={game.leaderboard} answerReview={game.answerReview} onNewRoom={game.newRoom} />;
     default:
       return null;
   }

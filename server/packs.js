@@ -134,7 +134,15 @@ export function loadPackForGame(data) {
     }
     roundEndIndices.push(questions.length - 1);
   }
-  return { questions, timerModes, roundEndIndices, questionRounds, roundTitles, answerTimeSec };
+  return {
+    questions,
+    timerModes,
+    roundEndIndices,
+    questionRounds,
+    roundTitles,
+    answerTimeSec,
+    showAnswers: data?.theme?.options?.showAnswers !== false,
+  };
 }
 
 export function resolveMediaUrl(value) {

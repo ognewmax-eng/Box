@@ -24,6 +24,7 @@ export function useHostGame() {
   const [answered, setAnswered] = useState([]);
   const [results, setResults] = useState(null);
   const [leaderboard, setLeaderboard] = useState([]);
+  const [answerReview, setAnswerReview] = useState(null);
   const [packs, setPacks] = useState([]);
   const [selectedPackId, setSelectedPackId] = useState('');
   const [theme, setTheme] = useState(null);
@@ -99,6 +100,7 @@ export function useHostGame() {
         setAnswered(snapshot.answered);
         setResults(snapshot.results);
         setLeaderboard(snapshot.leaderboard ?? []);
+        setAnswerReview(snapshot.answerReview ?? null);
         setShowRoundLeaderboard(snapshot.showRoundLeaderboard);
         setTheme(snapshot.theme);
         setTitle(snapshot.title);
@@ -138,8 +140,9 @@ export function useHostGame() {
         setShowRoundLeaderboard(false);
       },
       [SOCKET_EVENTS.ROUND_LEADERBOARD_SHOWN]: () => setShowRoundLeaderboard(true),
-      [SOCKET_EVENTS.GAME_OVER]: ({ leaderboard: list }) => {
+      [SOCKET_EVENTS.GAME_OVER]: ({ leaderboard: list, answerReview: review }) => {
         setLeaderboard(list);
+        setAnswerReview(review ?? null);
         setPhase('gameover');
       },
       [SOCKET_EVENTS.HOST_DISCONNECT]: () => {
@@ -177,7 +180,7 @@ export function useHostGame() {
   return {
     ...connection,
     phase, roomCode, joinUrl, players, question, questionIndex, totalQuestions, answered, results,
-    leaderboard, packs, selectedPackId, theme, title, timeLeft, totalTime, manualTimer, timerStarted,
+    leaderboard, answerReview, packs, selectedPackId, theme, title, timeLeft, totalTime, manualTimer, timerStarted,
     showRoundLeaderboard, notice,
     createRoom: () => emit(SOCKET_EVENTS.CREATE_ROOM, { joinBaseUrl: window.location.origin }),
     selectPack: (packId) => {
