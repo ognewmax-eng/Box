@@ -6,32 +6,15 @@
  */
 import { spawn, exec } from 'child_process';
 import http from 'http';
-import os from 'os';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import fs from 'fs';
+import { getLANIP } from './server/network.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const PORT = Number(process.env.PORT) || 3000;
-
-function getLocalIPs() {
-  const nets = os.networkInterfaces();
-  const list = [];
-  for (const name of Object.keys(nets)) {
-    for (const net of nets[name]) {
-      if (net.family === 'IPv4' && !net.internal) list.push(net.address);
-    }
-  }
-  return list;
-}
-
-function getLANIP() {
-  const list = getLocalIPs();
-  const lan = list.filter((ip) => ip.startsWith('192.168.') || ip.startsWith('10.'));
-  return lan[0] || list[0] || 'localhost';
-}
 
 const LAN_IP = getLANIP();
 const BASE_URL = LAN_IP === 'localhost' ? `http://localhost:${PORT}` : `http://${LAN_IP}:${PORT}`;
@@ -85,6 +68,20 @@ function openBrowser(url) {
   }
 }
 
+function newestMtime(path) {
+  const stat = fs.statSync(path);
+  if (!stat.isDirectory()) return stat.mtimeMs;
+  return Math.max(0, ...fs.readdirSync(path).map((name) => newestMtime(join(path, name))));
+}
+
+// Собираем клиент, если сборки нет или исходники новее неё
+function needsClientBuild(clientDir, clientDist) {
+  const builtIndex = join(clientDist, 'index.html');
+  if (!fs.existsSync(builtIndex)) return true;
+  const sources = [join(clientDir, 'src'), join(clientDir, 'index.html'), join(__dirname, 'constants.js')];
+  return Math.max(...sources.map(newestMtime)) > fs.statSync(builtIndex).mtimeMs;
+}
+
 async function main() {
   console.log('🎮 Box Party Game — запуск\n');
 
@@ -101,7 +98,7 @@ async function main() {
     await run('npm', ['install'], { cwd: clientDir });
   }
 
-  if (!fs.existsSync(clientDist)) {
+  if (needsClientBuild(clientDir, clientDist)) {
     console.log('Сборка клиента...');
     await run('npm', ['run', 'build']);
   }

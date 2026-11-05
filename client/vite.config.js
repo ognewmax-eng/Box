@@ -13,6 +13,7 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
+    fs: { allow: ['..'] }, // общие константы лежат в корне проекта
     proxy: {
       '/api': {
         target: proxyTarget,
@@ -24,7 +25,7 @@ export default defineConfig({
       },
       '/socket.io': {
         target: proxyTarget,
-        changeOrigin: true,
+        changeOrigin: false, // сервер сравнивает Origin с Host
         ws: true,
         configure: (proxy) => {
           proxy.on('error', (err) => {

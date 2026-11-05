@@ -3,17 +3,34 @@ import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Gamepad2 } from 'lucide-react';
 import { useSocket } from '../hooks/useSocket';
-import { SOCKET_EVENTS, ROOM_CODE_LENGTH } from '../constants';
+import { ANSWER_COLORS, ANSWER_LETTERS as LETTERS, GAME_STATES, ROOM_CODE_LENGTH, SOCKET_EVENTS } from '../constants';
 import { playTimeUpSound } from '../utils/playTimeUpSound';
+import { clearPlayerSession, loadPlayerSession, savePlayerSession } from '../utils/session';
 
-const LETTERS = ['A', 'B', 'C', 'D'];
-const ANSWER_COLORS = ['#ef4444', '#3b82f6', '#10b981', '#fbbf24'];
+const SCREEN_BY_STATE = {
+  [GAME_STATES.LOBBY]: 'lobby',
+  [GAME_STATES.QUESTION]: 'question',
+  [GAME_STATES.RESULTS]: 'results',
+  [GAME_STATES.GAME_OVER]: 'gameover',
+};
+
+function initialSession(roomFromUrl) {
+  const saved = loadPlayerSession();
+  if (!saved) return null;
+  // Ссылка ведёт в другую комнату: прошлая сессия больше не нужна
+  if (roomFromUrl && saved.code !== roomFromUrl.toUpperCase()) {
+    clearPlayerSession();
+    return null;
+  }
+  return saved;
+}
 
 export default function Client() {
   const [searchParams] = useSearchParams();
   const roomFromUrl = searchParams.get('room') || '';
   const { socket, connected, retry, connectionError } = useSocket();
-  const [screen, setScreen] = useState('join'); // join | lobby | question | results | gameover | error
+  const [screen, setScreen] = useState(() => (initialSession(roomFromUrl) ? 'resuming' : 'join')); // join | resuming | lobby | question | results | gameover | error
+  const [hostConnected, setHostConnected] = useState(true);
   const [roomCode, setRoomCode] = useState(roomFromUrl.toUpperCase());
   const [nickname, setNickname] = useState('');
   const [error, setError] = useState('');
@@ -43,20 +60,11 @@ export default function Client() {
 
   useEffect(() => {
     if (!socket) return;
-    socket.on(SOCKET_EVENTS.JOIN_SUCCESS, () => setScreen('lobby'));
-    socket.on(SOCKET_EVENTS.JOIN_ERROR, ({ message }) => {
-      setError(message);
-      setScreen('error');
-    });
-    socket.on(SOCKET_EVENTS.GAME_STARTED, () => {
-      setScreen('question');
-      setSelectedAnswer(null);
-    });
-    socket.on(SOCKET_EVENTS.QUESTION_START, (data) => {
-      setShowRoundLeaderboard(false);
+
+    const applyQuestion = (data) => {
       const mode = data.timerMode === 'manual' ? 'manual' : 'auto';
       setTimerMode(mode);
-      setTimerStarted(mode === 'auto');
+      setTimerStarted(data.timerStarted ?? mode === 'auto');
       setQuestion({
         type: data.type || 'choice',
         question: data.question,
@@ -67,39 +75,80 @@ export default function Client() {
       });
       setQuestionIndex(data.questionIndex);
       setTotalQuestions(data.total);
-      setSelectedAnswer(null);
-      setOpenAnswerText('');
-      setTimeLeft(data.timeSec ?? 15);
-      setScreen('question');
-    });
-    socket.on(SOCKET_EVENTS.QUESTION_TIMER_STARTED, ({ timeSec }) => {
-      setTimerStarted(true);
-      setTimeLeft(timeSec ?? 15);
-    });
-    socket.on(SOCKET_EVENTS.RESULTS, (data) => {
-      setResults(data);
-      setScreen('results');
-      if (data.roundOver) setShowRoundLeaderboard(false);
-    });
-    socket.on(SOCKET_EVENTS.ROUND_LEADERBOARD_SHOWN, () => setShowRoundLeaderboard(true));
-    socket.on(SOCKET_EVENTS.GAME_OVER, ({ leaderboard: lb }) => {
-      setLeaderboard(lb);
-      setScreen('gameover');
-    });
-    socket.on(SOCKET_EVENTS.HOST_DISCONNECT, () => {
-      setError('Ведущий отключился');
-      setScreen('error');
-    });
+      setTimeLeft(data.remainingSec ?? data.timeSec ?? 15);
+    };
+
+    const handlers = {
+      connect: () => {
+        const saved = loadPlayerSession();
+        if (saved) socket.emit(SOCKET_EVENTS.RESUME_SESSION, saved);
+      },
+      [SOCKET_EVENTS.JOIN_SUCCESS]: ({ code, token }) => {
+        savePlayerSession({ code, token });
+        setScreen('lobby');
+      },
+      [SOCKET_EVENTS.JOIN_ERROR]: ({ message }) => {
+        setError(message);
+        setScreen('error');
+      },
+      [SOCKET_EVENTS.SESSION_RESUMED]: (snapshot) => {
+        setRoomCode(snapshot.code);
+        setNickname(snapshot.nickname);
+        setHostConnected(snapshot.hostConnected);
+        setResults(snapshot.results);
+        setLeaderboard(snapshot.leaderboard ?? []);
+        setShowRoundLeaderboard(snapshot.showRoundLeaderboard);
+        if (snapshot.question) applyQuestion(snapshot.question);
+        const { myAnswer } = snapshot;
+        setSelectedAnswer(typeof myAnswer === 'string' ? 'sent' : myAnswer);
+        setOpenAnswerText(typeof myAnswer === 'string' ? myAnswer : '');
+        setScreen(SCREEN_BY_STATE[snapshot.state]);
+      },
+      [SOCKET_EVENTS.SESSION_INVALID]: () => {
+        clearPlayerSession();
+        setScreen('join');
+      },
+      [SOCKET_EVENTS.SESSION_REPLACED]: () => {
+        setError('Игра открыта в другой вкладке или на другом устройстве');
+        setScreen('error');
+      },
+      [SOCKET_EVENTS.HOST_STATUS]: ({ connected: isConnected }) => setHostConnected(isConnected),
+      [SOCKET_EVENTS.GAME_STARTED]: () => {
+        setScreen('question');
+        setSelectedAnswer(null);
+      },
+      [SOCKET_EVENTS.QUESTION_START]: (data) => {
+        setShowRoundLeaderboard(false);
+        applyQuestion(data);
+        setSelectedAnswer(null);
+        setOpenAnswerText('');
+        setScreen('question');
+      },
+      [SOCKET_EVENTS.QUESTION_TIMER_STARTED]: ({ timeSec }) => {
+        setTimerStarted(true);
+        setTimeLeft(timeSec ?? 15);
+      },
+      [SOCKET_EVENTS.RESULTS]: (data) => {
+        setResults(data);
+        setScreen('results');
+        if (data.roundOver) setShowRoundLeaderboard(false);
+      },
+      [SOCKET_EVENTS.ROUND_LEADERBOARD_SHOWN]: () => setShowRoundLeaderboard(true),
+      [SOCKET_EVENTS.GAME_OVER]: ({ leaderboard: lb }) => {
+        setLeaderboard(lb);
+        setScreen('gameover');
+      },
+      [SOCKET_EVENTS.HOST_DISCONNECT]: () => {
+        clearPlayerSession();
+        setError('Ведущий завершил игру');
+        setScreen('error');
+      },
+    };
+
+    for (const [event, handler] of Object.entries(handlers)) socket.on(event, handler);
+    if (socket.connected) handlers.connect();
     return () => {
-      socket.off(SOCKET_EVENTS.JOIN_SUCCESS);
-      socket.off(SOCKET_EVENTS.JOIN_ERROR);
-      socket.off(SOCKET_EVENTS.GAME_STARTED);
-      socket.off(SOCKET_EVENTS.QUESTION_START);
-      socket.off(SOCKET_EVENTS.QUESTION_TIMER_STARTED);
-      socket.off(SOCKET_EVENTS.RESULTS);
-      socket.off(SOCKET_EVENTS.ROUND_LEADERBOARD_SHOWN);
-      socket.off(SOCKET_EVENTS.GAME_OVER);
-      socket.off(SOCKET_EVENTS.HOST_DISCONNECT);
+      for (const [event, handler] of Object.entries(handlers)) socket.off(event, handler);
     };
   }, [socket]);
 
@@ -154,7 +203,8 @@ export default function Client() {
   if (!connected) {
     return (
       <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center gap-4 p-4 text-center max-w-md">
-        <p className="text-gray-400 font-bold">Нет связи с сервером</p>
+        <p className="text-gray-400 font-bold">Нет связи с сервером. Переподключаемся…</p>
+        <p className="text-gray-500 text-sm">Ваши очки сохранены, вы вернётесь в игру автоматически.</p>
         {connectionError && (
           <div className="rounded-2xl bg-white/5 border border-white/10 p-4 text-left w-full">
             <p className="text-[#22d3ee] font-mono text-sm mb-2">Код: {connectionError.code}</p>
@@ -178,7 +228,16 @@ export default function Client() {
         <div className="absolute top-0 right-0 w-72 h-72 bg-[#a855f7] rounded-full blur-[120px] opacity-20" />
         <div className="absolute bottom-0 left-0 w-72 h-72 bg-[#22d3ee] rounded-full blur-[120px] opacity-20" />
       </div>
+      {!hostConnected && ['lobby', 'question', 'results'].includes(screen) && (
+        <div className="relative z-20 mb-4 rounded-2xl bg-amber-500/20 border border-amber-500/50 px-4 py-3 text-amber-200 text-center text-sm">
+          Ведущий потерял связь. Ждём его возвращения…
+        </div>
+      )}
       <AnimatePresence mode="wait">
+        {screen === 'resuming' && (
+          <p key="resuming" className="relative z-10 text-center text-[#22d3ee] text-xl pt-20">Возвращаем в игру…</p>
+        )}
+
         {screen === 'join' && (
           <motion.div
             key="join"
@@ -345,7 +404,7 @@ export default function Client() {
                   >
                     <span
                       className="w-10 h-10 rounded-xl flex items-center justify-center mr-4 font-black text-white shrink-0"
-                      style={{ backgroundColor: ANSWER_COLORS[i % 4] }}
+                      style={{ backgroundColor: ANSWER_COLORS[i % ANSWER_COLORS.length] }}
                     >
                       {LETTERS[i]}
                     </span>
@@ -377,7 +436,7 @@ export default function Client() {
             {results?.roundOver ? (
               showRoundLeaderboard ? (
                 <>
-                  <h2 className="text-2xl font-black text-white mb-2">Итоги раунда {results.roundNumber ?? 1}</h2>
+                  <h2 className="text-2xl font-black text-white mb-2">Итоги раунда {results.roundTitle || (results.roundNumber ?? 1)}</h2>
                   <h3 className="text-xl font-bold text-[#a855f7] mb-4">Таблица лидеров</h3>
                   <ul className="space-y-3 mb-8">
                     {(results?.roundLeaderboard || results?.playerScores || []).map((entry, i) => (
@@ -456,6 +515,17 @@ export default function Client() {
                 </motion.li>
               ))}
             </ul>
+            <motion.button
+              onClick={() => {
+                clearPlayerSession();
+                setRoomCode('');
+                setScreen('join');
+              }}
+              className="w-full py-4 rounded-2xl bg-white/10 border border-white/10 hover:bg-white/20 font-bold"
+              whileTap={{ scale: 0.98 }}
+            >
+              Новая игра
+            </motion.button>
           </motion.div>
         )}
       </AnimatePresence>
