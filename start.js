@@ -10,6 +10,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import fs from 'fs';
 import { getLANIP } from './server/network.js';
+import { findBrokenPackages } from './scripts/check-deps.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -68,6 +69,13 @@ function openBrowser(url) {
   }
 }
 
+// npm ci удаляет node_modules и ставит ровно то, что записано в package-lock.json
+async function ensureDependencies(dir, label) {
+  if (findBrokenPackages(dir).length === 0) return;
+  console.log(`Установка зависимостей (${label})...`);
+  await run('npm', ['ci'], { cwd: dir });
+}
+
 function newestMtime(path) {
   const stat = fs.statSync(path);
   if (!stat.isDirectory()) return stat.mtimeMs;
@@ -89,14 +97,8 @@ async function main() {
   const clientDir = join(root, 'client');
   const clientDist = join(clientDir, 'dist');
 
-  if (!fs.existsSync(join(root, 'node_modules'))) {
-    console.log('Установка зависимостей (корень)...');
-    await run('npm', ['install']);
-  }
-  if (!fs.existsSync(join(clientDir, 'node_modules'))) {
-    console.log('Установка зависимостей (клиент)...');
-    await run('npm', ['install'], { cwd: clientDir });
-  }
+  await ensureDependencies(root, 'корень');
+  await ensureDependencies(clientDir, 'клиент');
 
   if (needsClientBuild(clientDir, clientDist)) {
     console.log('Сборка клиента...');
