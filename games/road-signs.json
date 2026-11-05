@@ -1,0 +1,207 @@
+{
+  "title": "Дорожная азбука",
+  "answerTimeSec": 20,
+  "theme": {
+    "preset": "clean",
+    "tile": "raised",
+    "texts": {
+      "pointsLabel": "Баллы",
+      "correctText": "Зачёт",
+      "wrongText": "Незачёт",
+      "finalTitle": "Лучшие на дороге"
+    }
+  },
+  "rounds": [
+    {
+      "timerStart": "auto",
+      "roundTitle": "Запрещающие знаки",
+      "questions": [
+        {
+          "type": "choice",
+          "question": "Что означает этот знак?",
+          "options": [
+            "Движение запрещено",
+            "Въезд запрещён",
+            "Тупик",
+            "Остановка запрещена"
+          ],
+          "correctIndex": 1,
+          "image": "road-signs/noentry.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Что означает этот знак?",
+          "options": [
+            "Движение запрещено",
+            "Конец всех ограничений",
+            "Главная дорога",
+            "Въезд запрещён"
+          ],
+          "correctIndex": 0,
+          "image": "road-signs/noveh.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Что означает этот знак?",
+          "options": [
+            "Остановка запрещена",
+            "Парковка",
+            "Стоянка запрещена",
+            "Движение запрещено"
+          ],
+          "correctIndex": 2,
+          "image": "road-signs/nopark.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Что означает этот знак?",
+          "options": [
+            "Стоянка запрещена",
+            "Перекрёсток",
+            "Въезд запрещён",
+            "Остановка запрещена"
+          ],
+          "correctIndex": 3,
+          "image": "road-signs/nostop.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Что означает этот знак?",
+          "options": [
+            "Рекомендуемая скорость 60 км/ч",
+            "Ограничение максимальной скорости",
+            "Минимальная скорость",
+            "Дистанция 60 м"
+          ],
+          "correctIndex": 1,
+          "image": "road-signs/speed.svg"
+        }
+      ]
+    },
+    {
+      "timerStart": "auto",
+      "roundTitle": "Приоритет и пешеходы",
+      "questions": [
+        {
+          "type": "choice",
+          "question": "Что означает этот знак?",
+          "options": [
+            "Движение без остановки запрещено",
+            "Въезд запрещён",
+            "Уступите дорогу",
+            "Главная дорога"
+          ],
+          "correctIndex": 0,
+          "image": "road-signs/stop.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Что означает этот знак?",
+          "options": [
+            "Опасный поворот",
+            "Движение запрещено",
+            "Уступите дорогу",
+            "Пешеходный переход"
+          ],
+          "correctIndex": 2,
+          "image": "road-signs/yield.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Что означает этот знак?",
+          "options": [
+            "Перекрёсток",
+            "Главная дорога",
+            "Уступите дорогу",
+            "Конец главной дороги"
+          ],
+          "correctIndex": 1,
+          "image": "road-signs/priority.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Что означает этот знак?",
+          "options": [
+            "Главная дорога",
+            "Въезд запрещён",
+            "Опасность",
+            "Конец главной дороги"
+          ],
+          "correctIndex": 3,
+          "image": "road-signs/endpriority.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Что означает этот знак?",
+          "options": [
+            "Осторожно, дети",
+            "Пешеходная дорожка",
+            "Пешеходный переход",
+            "Движение пешеходов запрещено"
+          ],
+          "correctIndex": 2,
+          "image": "road-signs/crossing.svg"
+        }
+      ]
+    },
+    {
+      "timerStart": "manual",
+      "roundTitle": "Светофор и указатели",
+      "questions": [
+        {
+          "type": "choice",
+          "question": "Что означает этот знак?",
+          "options": [
+            "Парковка",
+            "Пункт питания",
+            "Автобусная остановка",
+            "Больница"
+          ],
+          "correctIndex": 0,
+          "image": "road-signs/parking.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Что означает этот знак?",
+          "options": [
+            "Разворот",
+            "Объезд препятствия",
+            "Опасный поворот",
+            "Круговое движение"
+          ],
+          "correctIndex": 3,
+          "image": "road-signs/roundabout.svg"
+        },
+        {
+          "type": "open",
+          "question": "Какой цвет этого сигнала светофора разрешает движение?",
+          "correctAnswer": "Зелёный",
+          "image": "road-signs/light.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Какой сигнал светофора находится посередине?",
+          "options": [
+            "Красный",
+            "Зелёный",
+            "Жёлтый",
+            "Синий"
+          ],
+          "correctIndex": 2
+        },
+        {
+          "type": "choice",
+          "question": "Старше скольких лет можно ехать на велосипеде по краю проезжей части?",
+          "options": [
+            "7",
+            "10",
+            "14",
+            "18"
+          ],
+          "correctIndex": 2,
+          "image": "road-signs/bike.svg"
+        }
+      ]
+    }
+  ]
+}

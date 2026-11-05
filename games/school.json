@@ -1,0 +1,202 @@
+{
+  "title": "Большая перемена",
+  "answerTimeSec": 30,
+  "theme": {
+    "preset": "chalk",
+    "texts": {
+      "pointsLabel": "Пятёрки",
+      "correctText": "Отлично",
+      "wrongText": "Подумай ещё",
+      "finalTitle": "Лучшие ученики",
+      "waitMessage": "Садитесь за парты: урок скоро начнётся"
+    }
+  },
+  "rounds": [
+    {
+      "timerStart": "manual",
+      "roundTitle": "Часы и числа",
+      "questions": [
+        {
+          "type": "choice",
+          "question": "Который час показывают часы?",
+          "options": [
+            "3:35",
+            "7:15",
+            "6:15",
+            "7:45"
+          ],
+          "correctIndex": 1,
+          "image": "school/clock.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Который час показывают часы?",
+          "options": [
+            "2:30",
+            "6:10",
+            "3:30",
+            "2:06"
+          ],
+          "correctIndex": 0,
+          "image": "school/clock2.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Какая часть круга закрашена?",
+          "options": [
+            "1/2",
+            "1/4",
+            "3/4",
+            "2/3"
+          ],
+          "correctIndex": 2,
+          "image": "school/pie.svg"
+        },
+        {
+          "type": "open",
+          "question": "Сколько всего точек на двух кубиках?",
+          "correctAnswer": "8",
+          "image": "school/dice.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Какая фигура должна стоять в пустой клетке?",
+          "options": [
+            "Квадрат",
+            "Треугольник",
+            "Звезда",
+            "Круг"
+          ],
+          "correctIndex": 3,
+          "image": "school/sequence.svg"
+        }
+      ]
+    },
+    {
+      "timerStart": "manual",
+      "roundTitle": "Геометрия",
+      "questions": [
+        {
+          "type": "choice",
+          "question": "Сколько сторон у этой фигуры?",
+          "options": [
+            "5",
+            "6",
+            "7",
+            "8"
+          ],
+          "correctIndex": 1,
+          "image": "school/hexagon.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Как называется этот треугольник?",
+          "options": [
+            "Прямоугольный",
+            "Равносторонний",
+            "Тупоугольный",
+            "Остроугольный"
+          ],
+          "correctIndex": 0,
+          "image": "school/right.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Сколько граней у куба?",
+          "options": [
+            "4",
+            "8",
+            "6",
+            "12"
+          ],
+          "correctIndex": 2,
+          "image": "school/cube.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Как называется красный отрезок?",
+          "options": [
+            "Диаметр",
+            "Хорда",
+            "Касательная",
+            "Радиус"
+          ],
+          "correctIndex": 3,
+          "image": "school/radius.svg"
+        },
+        {
+          "type": "open",
+          "question": "Как называется эта фигура?",
+          "correctAnswer": "Трапеция",
+          "image": "school/trapezoid.svg"
+        }
+      ]
+    },
+    {
+      "timerStart": "auto",
+      "roundTitle": "Вокруг нас",
+      "questions": [
+        {
+          "type": "choice",
+          "question": "Какой цвет в радуге идёт сразу после зелёного?",
+          "options": [
+            "Голубой",
+            "Жёлтый",
+            "Синий",
+            "Фиолетовый"
+          ],
+          "correctIndex": 0,
+          "image": "school/rainbow.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Сколько ног у насекомых?",
+          "options": [
+            "4",
+            "8",
+            "6",
+            "10"
+          ],
+          "correctIndex": 2,
+          "image": "school/beetle.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Сколько ног у паука?",
+          "options": [
+            "6",
+            "8",
+            "10",
+            "12"
+          ],
+          "correctIndex": 1,
+          "image": "school/spider.svg"
+        },
+        {
+          "type": "choice",
+          "question": "При какой температуре замерзает вода?",
+          "options": [
+            "0 °C",
+            "−10 °C",
+            "10 °C",
+            "100 °C"
+          ],
+          "correctIndex": 0,
+          "image": "school/ice.svg"
+        },
+        {
+          "type": "choice",
+          "question": "С какой стороны горизонта восходит солнце?",
+          "options": [
+            "С запада",
+            "С севера",
+            "С юга",
+            "С востока"
+          ],
+          "correctIndex": 3,
+          "image": "school/sunrise.svg"
+        }
+      ]
+    }
+  ]
+}

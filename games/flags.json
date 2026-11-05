@@ -1,0 +1,204 @@
+{
+  "title": "Флаги мира",
+  "answerTimeSec": 20,
+  "theme": {
+    "preset": "studio",
+    "texts": {
+      "lobbyHint": "Наведите камеру на QR-код и угадывайте страны по флагам",
+      "finalTitle": "Лучшие знатоки флагов"
+    }
+  },
+  "rounds": [
+    {
+      "timerStart": "auto",
+      "roundTitle": "Три полосы",
+      "questions": [
+        {
+          "type": "choice",
+          "question": "Флаг какой страны?",
+          "options": [
+            "Бельгия",
+            "Германия",
+            "Литва",
+            "Армения"
+          ],
+          "correctIndex": 1,
+          "image": "flags/germany.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Флаг какой страны?",
+          "options": [
+            "Ирландия",
+            "Мексика",
+            "Венгрия",
+            "Италия"
+          ],
+          "correctIndex": 3,
+          "image": "flags/italy.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Флаг какой страны?",
+          "options": [
+            "Франция",
+            "Нидерланды",
+            "Россия",
+            "Люксембург"
+          ],
+          "correctIndex": 0,
+          "image": "flags/france.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Флаг какой страны?",
+          "options": [
+            "Франция",
+            "Россия",
+            "Нидерланды",
+            "Хорватия"
+          ],
+          "correctIndex": 2,
+          "image": "flags/netherlands.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Флаг какой страны?",
+          "options": [
+            "Польша",
+            "Австрия",
+            "Латвия",
+            "Индонезия"
+          ],
+          "correctIndex": 1,
+          "image": "flags/austria.svg"
+        }
+      ]
+    },
+    {
+      "timerStart": "auto",
+      "roundTitle": "Кресты",
+      "questions": [
+        {
+          "type": "choice",
+          "question": "Флаг какой страны?",
+          "options": [
+            "Норвегия",
+            "Финляндия",
+            "Дания",
+            "Швеция"
+          ],
+          "correctIndex": 3,
+          "image": "flags/sweden.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Флаг какой страны?",
+          "options": [
+            "Финляндия",
+            "Швеция",
+            "Исландия",
+            "Греция"
+          ],
+          "correctIndex": 0,
+          "image": "flags/finland.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Флаг какой страны?",
+          "options": [
+            "Швейцария",
+            "Дания",
+            "Англия",
+            "Норвегия"
+          ],
+          "correctIndex": 1,
+          "image": "flags/denmark.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Флаг какой страны?",
+          "options": [
+            "Дания",
+            "Австрия",
+            "Швейцария",
+            "Грузия"
+          ],
+          "correctIndex": 2,
+          "image": "flags/switzerland.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Флаг какой страны?",
+          "options": [
+            "Израиль",
+            "Кипр",
+            "Уругвай",
+            "Греция"
+          ],
+          "correctIndex": 3,
+          "image": "flags/greece.svg"
+        }
+      ]
+    },
+    {
+      "timerStart": "manual",
+      "roundTitle": "Символы",
+      "questions": [
+        {
+          "type": "choice",
+          "question": "Флаг какой страны?",
+          "options": [
+            "Япония",
+            "Южная Корея",
+            "Палау",
+            "Бангладеш"
+          ],
+          "correctIndex": 0,
+          "image": "flags/japan.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Флаг какой страны?",
+          "options": [
+            "Япония",
+            "Бангладеш",
+            "Пакистан",
+            "Палау"
+          ],
+          "correctIndex": 1,
+          "image": "flags/bangladesh.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Флаг какой страны?",
+          "options": [
+            "Тунис",
+            "Азербайджан",
+            "Турция",
+            "Алжир"
+          ],
+          "correctIndex": 2,
+          "image": "flags/turkey.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Флаг какой страны?",
+          "options": [
+            "Китай",
+            "Марокко",
+            "Сомали",
+            "Вьетнам"
+          ],
+          "correctIndex": 3,
+          "image": "flags/vietnam.svg"
+        },
+        {
+          "type": "open",
+          "question": "На флаге какой страны изображён кленовый лист?",
+          "correctAnswer": "Канада"
+        }
+      ]
+    }
+  ]
+}

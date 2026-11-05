@@ -1,0 +1,199 @@
+{
+  "title": "Кино по картинке",
+  "answerTimeSec": 25,
+  "theme": {
+    "preset": "retro",
+    "texts": {
+      "pointsLabel": "Попкорн",
+      "finalTitle": "И «Оскар» получает",
+      "lobbyHint": "Занимайте места: вход по QR-коду или по коду комнаты"
+    }
+  },
+  "rounds": [
+    {
+      "timerStart": "auto",
+      "roundTitle": "Мультфильмы",
+      "questions": [
+        {
+          "type": "choice",
+          "question": "Какой мультфильм зашифрован?",
+          "options": [
+            "Мадагаскар",
+            "Король Лев",
+            "Книга джунглей",
+            "Зверополис"
+          ],
+          "correctIndex": 1,
+          "image": "movies/lion.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Какой мультфильм зашифрован?",
+          "options": [
+            "Подводная братва",
+            "Русалочка",
+            "В поисках Немо",
+            "Лука"
+          ],
+          "correctIndex": 2,
+          "image": "movies/fish.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Какой мультфильм зашифрован?",
+          "options": [
+            "Вверх",
+            "Рататуй",
+            "Тайна Коко",
+            "Унесённые призраками"
+          ],
+          "correctIndex": 0,
+          "image": "movies/balloons.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Какой мультфильм зашифрован?",
+          "options": [
+            "Рапунцель",
+            "Храбрая сердцем",
+            "Моана",
+            "Холодное сердце"
+          ],
+          "correctIndex": 3,
+          "image": "movies/snow.svg"
+        },
+        {
+          "type": "open",
+          "question": "Назовите этого зелёного героя.",
+          "correctAnswer": "Шрек",
+          "image": "movies/ogre.svg"
+        }
+      ]
+    },
+    {
+      "timerStart": "auto",
+      "roundTitle": "Блокбастеры",
+      "questions": [
+        {
+          "type": "choice",
+          "question": "Какой фильм зашифрован?",
+          "options": [
+            "Титаник",
+            "Пираты Карибского моря",
+            "Идеальный шторм",
+            "Левиафан"
+          ],
+          "correctIndex": 0,
+          "image": "movies/iceberg.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Какой фильм зашифрован?",
+          "options": [
+            "Хроники Нарнии",
+            "Гарри Поттер",
+            "Перси Джексон",
+            "Сумерки"
+          ],
+          "correctIndex": 1,
+          "image": "movies/wizard.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Какой фильм зашифрован?",
+          "options": [
+            "Хроники Нарнии",
+            "Игра престолов",
+            "Властелин колец",
+            "Гладиатор"
+          ],
+          "correctIndex": 2,
+          "image": "movies/ring.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Какой фильм зашифрован?",
+          "options": [
+            "Аватар",
+            "Звёздный путь",
+            "Матрица",
+            "Звёздные войны"
+          ],
+          "correctIndex": 3,
+          "image": "movies/saber.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Какой фильм зашифрован?",
+          "options": [
+            "Челюсти",
+            "Глубокое синее море",
+            "Водный мир",
+            "Пираньи"
+          ],
+          "correctIndex": 0,
+          "image": "movies/shark.svg"
+        }
+      ]
+    },
+    {
+      "timerStart": "manual",
+      "roundTitle": "Наше кино",
+      "questions": [
+        {
+          "type": "choice",
+          "question": "В какой город по ошибке улетел Женя Лукашин в «Иронии судьбы»?",
+          "options": [
+            "Москва",
+            "Киев",
+            "Ленинград",
+            "Рига"
+          ],
+          "correctIndex": 2,
+          "image": "movies/plane.svg"
+        },
+        {
+          "type": "open",
+          "question": "Назовите фамилию режиссёра «Иронии судьбы».",
+          "correctAnswer": "Рязанов"
+        },
+        {
+          "type": "choice",
+          "question": "Где были спрятаны драгоценности в «Бриллиантовой руке»?",
+          "options": [
+            "В чемодане",
+            "В гипсе",
+            "В машине",
+            "В шляпе"
+          ],
+          "correctIndex": 1,
+          "image": "movies/diamond.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Какой царь оказался в Москве XX века в фильме «Иван Васильевич меняет профессию»?",
+          "options": [
+            "Пётр I",
+            "Борис Годунов",
+            "Николай II",
+            "Иван Грозный"
+          ],
+          "correctIndex": 3,
+          "image": "movies/crown.svg"
+        },
+        {
+          "type": "choice",
+          "question": "Как зовут главного героя «Белого солнца пустыни»?",
+          "options": [
+            "Сухов",
+            "Верещагин",
+            "Абдулла",
+            "Саид"
+          ],
+          "correctIndex": 0,
+          "image": "movies/desert.svg"
+        }
+      ]
+    }
+  ]
+}
