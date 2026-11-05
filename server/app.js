@@ -19,7 +19,7 @@ function isSameOrigin(req) {
   }
 }
 
-export function createGameServer({ appRoot, adminPassword, lanIp, port, game = {} }) {
+export function createGameServer({ appRoot, clientBuild, adminPassword, lanIp, port, game = {} }) {
   const gamesDir = join(appRoot, 'games');
   const mediaDir = join(gamesDir, 'media');
   fs.mkdirSync(mediaDir, { recursive: true });
@@ -27,7 +27,7 @@ export function createGameServer({ appRoot, adminPassword, lanIp, port, game = {
   const app = createHttpApp({
     gamesDir,
     mediaDir,
-    clientBuild: join(appRoot, 'client', 'dist'),
+    clientBuild: clientBuild ?? join(appRoot, 'client', 'dist'),
     adminPassword,
   });
   const httpServer = createServer(app);

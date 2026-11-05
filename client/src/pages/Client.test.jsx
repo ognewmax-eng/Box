@@ -120,3 +120,25 @@ describe('Client: игра', () => {
     expect(screen.getByLabelText('Код комнаты')).toBeInTheDocument();
   });
 });
+
+describe('Client: игра без показа ответов', () => {
+  it('не показывает «Верно» или «Мимо», только что ответ записан', () => {
+    localStorage.clear();
+    const handlers = {};
+    mockSocket.current = { connected: true, emit: vi.fn(), off: vi.fn(), on: (event, handler) => { handlers[event] = handler; } };
+    render(<BrowserRouter><Client /></BrowserRouter>);
+    act(() => handlers[SOCKET_EVENTS.SESSION_RESUMED]({
+      code: 'ABCD',
+      nickname: 'Аня',
+      state: 'RESULTS',
+      hostConnected: true,
+      showRoundLeaderboard: false,
+      myAnswer: 1,
+      question: { questionIndex: 0, total: 2, type: 'choice', question: 'Q', options: ['a', 'b'], timeSec: 15 },
+      results: { answersHidden: true, answeredCount: 1, playerScores: [], roundOver: false },
+    }));
+    expect(screen.getByText(/Ответ записан/)).toBeInTheDocument();
+    expect(screen.queryByText('Верно')).toBeNull();
+    expect(screen.queryByText('Мимо')).toBeNull();
+  });
+});

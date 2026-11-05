@@ -11,7 +11,7 @@ const ENUMS = {
 };
 const COLOR_KEYS = ['bg', 'surface', 'text', 'accent', 'ink'];
 const TEXT_KEYS = ['lobbyHint', 'waitMessage', 'finalTitle', 'pointsLabel', 'correctText', 'wrongText'];
-const OPTION_KEYS = ['showAnswerCounts', 'showAnswererNames', 'showLeaderboardOnPhones'];
+const OPTION_KEYS = ['showAnswers', 'showAnswerCounts', 'showAnswererNames', 'showLeaderboardOnPhones'];
 
 function pickHexColors(source) {
   const colors = {};

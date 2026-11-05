@@ -190,6 +190,85 @@ describe('оформление игры', () => {
   });
 });
 
+describe('игра без показа ответов', () => {
+  let server;
+  before(async () => {
+    server = await startTestServer();
+    fs.writeFileSync(join(server.appRoot, 'games', 'hidden.json'), JSON.stringify({
+      title: 'Без ответов',
+      theme: { options: { showAnswers: false } },
+      rounds: [{
+        questions: [
+          { type: 'choice', question: 'Q1', options: ['a', 'b'], correctIndex: 1 },
+          { type: 'open', question: 'Q2', correctAnswer: 'Ёж' },
+        ],
+      }],
+    }));
+  });
+  after(() => server.stop());
+
+  it('до финала ответы и счёт не уходят ни на один экран, очки считаются', async () => {
+    const { host, code } = await createRoom(server);
+    const player = await joinPlayer(server, code, 'Игрок');
+    host.emit(EV.SELECT_PACK, { packId: 'hidden' });
+    await once(host, EV.ROOM_THEME);
+    const q1 = once(player.socket, EV.QUESTION_START);
+    host.emit(EV.START_GAME, {});
+    await q1;
+
+    let answered = once(host, EV.PLAYER_ANSWERED);
+    player.socket.emit(EV.SUBMIT_ANSWER, { answerIndex: 1 });
+    await answered;
+    let results = once(player.socket, EV.RESULTS);
+    host.emit(EV.SHOW_RESULTS);
+    const first = await results;
+    assert.equal(first.answersHidden, true);
+    assert.equal(first.answeredCount, 1);
+    assert.deepEqual(first.playerScores, []);
+    for (const key of ['correctIndex', 'correctAnswer', 'correctNicknames', 'answerCounts', 'openAnswers', 'roundLeaderboard']) {
+      assert.equal(first[key], undefined, key);
+    }
+
+    // После обрыва связи ответ тоже не утекает
+    const back = await server.connect();
+    back.emit(EV.RESUME_SESSION, { code, token: player.token });
+    const snapshot = await once(back, EV.SESSION_RESUMED);
+    assert.equal(JSON.stringify(snapshot.results).includes('correct'), false);
+    assert.equal(snapshot.answerReview, undefined);
+
+    const q2 = once(back, EV.QUESTION_START);
+    host.emit(EV.NEXT_QUESTION);
+    await q2;
+    answered = once(host, EV.PLAYER_ANSWERED);
+    back.emit(EV.SUBMIT_ANSWER, { answerText: 'еж' });
+    await answered;
+    results = once(back, EV.RESULTS);
+    host.emit(EV.SHOW_RESULTS);
+    const last = await results;
+    assert.equal(last.roundOver, true);
+    assert.deepEqual(last.roundLeaderboard, [{ nickname: 'Игрок', score: 2 }]);
+    assert.equal(last.correctAnswer, undefined);
+
+    const over = once(back, EV.GAME_OVER);
+    host.emit(EV.NEXT_QUESTION);
+    assert.deepEqual((await over).answerReview, [
+      { question: 'Q1', answer: 'b' },
+      { question: 'Q2', answer: 'Ёж' },
+    ]);
+  });
+
+  it('в обычной игре разбора нет', async () => {
+    const { host } = await createRoom(server);
+    const started = once(host, EV.QUESTION_START);
+    host.emit(EV.START_GAME, { packId: 'test' });
+    await started;
+    assert.equal(server.rooms.size > 0, true);
+    const results = once(host, EV.RESULTS);
+    host.emit(EV.SHOW_RESULTS);
+    assert.equal((await results).answersHidden, undefined);
+  });
+});
+
 describe('возврат в игру', () => {
   let server;
   before(async () => { server = await startTestServer({ lobbyGraceMs: 30, hostGraceMs: 80 }); });

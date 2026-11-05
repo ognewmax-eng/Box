@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Play } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
@@ -91,11 +92,13 @@ export function HostQuestionView({
   results, onStartTimer, onShowResults, onNext, onShowLeaderboard, onEnd, notice,
 }) {
   const theme = useTheme();
-  const reveal = Boolean(results);
-  const showDrain = !reveal && timerStarted;
+  const closed = Boolean(results);
+  const reveal = closed && !results.answersHidden;
+  const showDrain = !closed && timerStarted;
   const isLast = index + 1 >= total;
   const isOpen = question.type === 'open';
   const options = question.options || [];
+  const hasMedia = Boolean(question.image || question.video || question.audio);
 
   return (
     <div className="tv-pad tv-gap relative flex h-full flex-col">
@@ -110,7 +113,7 @@ export function HostQuestionView({
         question={question}
         index={index}
         total={total}
-        right={!reveal && (manual && !timerStarted ? (
+        right={!closed && (manual && !timerStarted ? (
           <button type="button" onClick={onStartTimer} className="btn tv-sm">Запустить таймер</button>
         ) : (
           <span className="font-display-t tv-xl tabular-nums" role="timer" style={{ color: timeLeft <= 5 ? 'var(--t-accent)' : undefined }}>{timeLeft}</span>
@@ -118,55 +121,58 @@ export function HostQuestionView({
       />
       {notice && <Banner className="tv-sm">{notice}</Banner>}
 
+      {/* В вопросе с картинкой она и есть главное: занимает половину экрана по всей высоте */}
       <div className="tv-gap flex min-h-0 flex-1">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col justify-center">
-          <h1 className={`font-display-t ${questionSizeClass(question.question)} max-w-[32ch] [overflow-wrap:anywhere]`}>{question.question}</h1>
+        <div className="tv-gap flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="flex min-h-0 flex-1 flex-col justify-center">
+            <h1 className={`font-display-t ${hasMedia ? 'tv-lg' : questionSizeClass(question.question)} max-w-[32ch] [overflow-wrap:anywhere]`}>{question.question}</h1>
+          </div>
+          {isOpen ? (
+            <OpenAnswerPanel reveal={reveal} closed={closed} results={results} />
+          ) : (
+            <div className={`tv-gap grid ${answerGridClass(options.length)} ${options.length > 6 || (hasMedia && options.length > 4) ? 'tv-sm' : options.length > 4 || hasMedia ? 'tv-ms' : 'tv-md'}`}>
+              {options.map((option, i) => (
+                <AnswerTile
+                  key={i}
+                  index={i}
+                  text={option}
+                  reveal={reveal}
+                  correctIndex={results?.correctIndex}
+                  count={theme.options.showAnswerCounts ? results?.answerCounts?.[i] : undefined}
+                  className="min-h-[min(9cqw,15cqh)]"
+                />
+              ))}
+            </div>
+          )}
         </div>
-        {(question.image || question.video || question.audio) && (
-          <QuestionMedia question={question} className="w-[38%]" />
-        )}
+        {hasMedia && <QuestionMedia question={question} className="w-[40%]" />}
       </div>
-
-      {isOpen ? (
-        <OpenAnswerPanel reveal={reveal} results={results} />
-      ) : (
-        <div className={`tv-gap grid ${answerGridClass(options.length)} ${options.length > 6 ? 'tv-sm' : options.length > 4 ? 'tv-ms' : 'tv-md'}`}>
-          {options.map((option, i) => (
-            <AnswerTile
-              key={i}
-              index={i}
-              text={option}
-              reveal={reveal}
-              correctIndex={results?.correctIndex}
-              count={theme.options.showAnswerCounts ? results?.answerCounts?.[i] : undefined}
-              className="min-h-[min(9cqw,15cqh)]"
-            />
-          ))}
-        </div>
-      )}
 
       <footer className="tv-gap flex items-center justify-between">
         <div className="tv-sm min-w-0 flex-1">
-          {reveal ? (
-            <TopScores entries={results.playerScores} label={theme.texts.pointsLabel} />
-          ) : (
+          {reveal && <TopScores entries={results.playerScores} label={theme.texts.pointsLabel} />}
+          {closed && !reveal && <strong className="tabular-nums">Ответы приняты: {results.answeredCount} из {playerCount}</strong>}
+          {!closed && (
             <AnsweredStatus answered={answered} playerCount={playerCount} showNames={theme.options.showAnswererNames} />
           )}
         </div>
         <div className="flex shrink-0 items-center gap-[1em]">
           {onEnd && <button type="button" onClick={onEnd} className="tv-xs underline-offset-4 hover:underline" style={{ color: 'var(--t-muted)' }}>Завершить игру</button>}
-          {!reveal && <button type="button" onClick={onShowResults} className="btn tv-md">Показать ответ</button>}
-          {reveal && results.roundOver && <button type="button" onClick={onShowLeaderboard} className="btn tv-md">Таблица раунда</button>}
-          {reveal && !results.roundOver && <button type="button" onClick={onNext} className="btn tv-md">{isLast ? 'К итогам' : 'Следующий вопрос'}</button>}
+          {!closed && <button type="button" onClick={onShowResults} className="btn tv-md">{theme.options.showAnswers ? 'Показать ответ' : 'Закрыть ответы'}</button>}
+          {closed && results.roundOver && <button type="button" onClick={onShowLeaderboard} className="btn tv-md">Таблица раунда</button>}
+          {closed && !results.roundOver && <button type="button" onClick={onNext} className="btn tv-md">{isLast ? 'К итогам' : 'Следующий вопрос'}</button>}
         </div>
       </footer>
     </div>
   );
 }
 
-function OpenAnswerPanel({ reveal, results }) {
+function OpenAnswerPanel({ reveal, closed, results }) {
+  if (closed && !reveal) {
+    return <p className="tv-md py-[0.6em]" style={{ color: 'var(--t-muted)' }}>Правильные ответы будут в конце игры.</p>;
+  }
   if (!reveal) {
-    return <p className="tv-md py-[0.6em]" style={{ color: 'var(--t-muted)' }}>Игроки вводят ответ на телефонах. Ответы появятся после показа.</p>;
+    return <p className="tv-md py-[0.6em]" style={{ color: 'var(--t-muted)' }}>Игроки вводят ответ на телефонах.</p>;
   }
   return (
     <div className="flex min-h-0 flex-col gap-[min(1cqw,1.8cqh)]">
@@ -232,8 +238,28 @@ const PODIUM_HEIGHT = ['70%', '54%', '40%'];
 const PODIUM_DELAY = [1.1, 0.6, 0.1];
 
 /** Финал: пьедестал вырастает снизу вверх, третье место первым. Главный момент вечера. */
-export function HostFinalView({ title, leaderboard, onNewRoom, celebrate = true }) {
+export function HostFinalView({ title, leaderboard, answerReview, onNewRoom, celebrate = true }) {
   const theme = useTheme();
+  const [reviewOpen, setReviewOpen] = useState(false);
+
+  if (reviewOpen && answerReview) {
+    return (
+      <div className="tv-pad tv-gap flex h-full flex-col">
+        <h1 className="font-display-t tv-xl">Правильные ответы</h1>
+        <ol className="tv-sm min-h-0 flex-1 list-inside list-decimal overflow-y-auto [column-gap:3cqw] [columns:2]">
+          {answerReview.map((item) => (
+            <li key={item.question} className="mb-[0.7em] break-inside-avoid">
+              {item.question} <strong style={{ color: 'var(--t-accent)' }}>{item.answer}</strong>
+            </li>
+          ))}
+        </ol>
+        <div className="flex justify-end">
+          <button type="button" onClick={() => setReviewOpen(false)} className="btn btn-quiet tv-sm">К итоговой таблице</button>
+        </div>
+      </div>
+    );
+  }
+
   const top = leaderboard.slice(0, 3);
   const rest = leaderboard.slice(3, 9);
   return (
@@ -271,9 +297,10 @@ export function HostFinalView({ title, leaderboard, onNewRoom, celebrate = true 
         </div>
         {rest.length > 0 && <div className="w-[26%] self-end"><ScoreList entries={rest} className="tv-sm" /></div>}
       </div>
-      {onNewRoom && (
-        <div className="flex justify-end"><button type="button" onClick={onNewRoom} className="btn btn-quiet tv-sm">Новая комната</button></div>
-      )}
+      <div className="flex justify-end gap-[1em]">
+        {answerReview && <button type="button" onClick={() => setReviewOpen(true)} className="btn tv-sm">Показать правильные ответы</button>}
+        {onNewRoom && <button type="button" onClick={onNewRoom} className="btn btn-quiet tv-sm">Новая комната</button>}
+      </div>
     </div>
   );
 }

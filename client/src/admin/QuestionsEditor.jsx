@@ -118,7 +118,7 @@ function QuestionCard({ question, number, onChange, onRemove, onUploadMedia, rad
                 aria-label={`${label} к вопросу ${number}`}
                 className="field py-1.5"
               />
-              <label className="shrink-0 cursor-pointer font-bold underline underline-offset-2">
+              <label className="relative shrink-0 cursor-pointer font-bold underline underline-offset-2">
                 Загрузить
                 <input type="file" accept={accept} className="sr-only" onChange={(e) => onUploadMedia(key, e)} />
               </label>
@@ -159,6 +159,24 @@ export default function QuestionsEditor({ form, setForm, onUpload, answerTimes }
         >
           {answerTimes.map((n) => <option key={n} value={n}>{n} секунд</option>)}
         </select>
+      </label>
+
+      <label className="flex items-start gap-2">
+        <input
+          type="checkbox"
+          className="mt-1 h-4 w-4"
+          checked={form.theme?.options?.showAnswers !== false}
+          onChange={(e) => setForm((f) => ({
+            ...f,
+            theme: { ...f.theme, options: { ...f.theme?.options, showAnswers: e.target.checked } },
+          }))}
+        />
+        <span>
+          <span className="font-bold">Показывать правильный ответ после каждого вопроса</span>
+          <span className="block text-sm" style={{ color: 'var(--t-muted)' }}>
+            Если выключить, игроки не увидят ни ответа, ни счёта до конца раунда. Правильные ответы ведущий откроет на финальном экране.
+          </span>
+        </span>
       </label>
 
       {form.rounds.map((round, ri) => (
