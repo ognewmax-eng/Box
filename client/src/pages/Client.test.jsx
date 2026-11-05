@@ -47,8 +47,7 @@ describe('Client', () => {
 
   it('shows BOX PARTY title on join screen', () => {
     renderClient();
-    expect(screen.getByText(/BOX/)).toBeInTheDocument();
-    expect(screen.getByText(/PARTY/)).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'BOX PARTY' })).toBeInTheDocument();
   });
 });
 

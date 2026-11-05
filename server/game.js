@@ -1,6 +1,7 @@
 import { randomInt, randomUUID } from 'crypto';
 import { GAME_STATES, QUESTION_TIME_SEC, ROOM_CODE_LENGTH, SOCKET_EVENTS as EV } from '../constants.js';
 import { loadPackForGame, normalizeAnswer, normalizeQuestion, readPack, resolveMediaUrl } from './packs.js';
+import { sanitizeTheme } from './theme.js';
 import { buildJoinUrl } from './network.js';
 
 const DEFAULTS = {
@@ -70,6 +71,8 @@ function buildSnapshot(room, role, player, opts) {
     role,
     code: room.code,
     state: room.state,
+    theme: room.theme,
+    title: room.title,
     hostConnected: room.hostConnected,
     question: room.state === GAME_STATES.LOBBY ? null : questionPayload(room, opts),
     results: room.state === GAME_STATES.RESULTS ? room.lastResults : null,
@@ -80,6 +83,7 @@ function buildSnapshot(room, role, player, opts) {
     return {
       ...base,
       joinUrl: room.joinUrl,
+      packId: room.packId,
       players: publicPlayers(room),
       answerKey: room.state === GAME_STATES.LOBBY ? null : hostAnswerKey(room),
       answered: [...room.answers.entries()].map(([id, value]) => ({
@@ -142,12 +146,20 @@ export function registerGame(io, { gamesDir, lanIp, port, ...overrides }) {
 
     const isOpen = question.type === 'open';
     const correctNorm = isOpen ? normalizeAnswer(question.correctAnswer) : null;
-    for (const id of room.players.keys()) {
+    const correctNicknames = [];
+    const answerCounts = isOpen ? undefined : question.options.map(() => 0);
+    const openAnswers = isOpen ? [] : undefined;
+    for (const [id, player] of room.players) {
       const answer = room.answers.get(id);
       const isCorrect = isOpen
         ? Boolean(correctNorm) && normalizeAnswer(answer) === correctNorm
         : answer === question.correctIndex;
-      if (isCorrect) room.scores.set(id, (room.scores.get(id) ?? 0) + 1);
+      if (isCorrect) {
+        room.scores.set(id, (room.scores.get(id) ?? 0) + 1);
+        correctNicknames.push(player.nickname);
+      }
+      if (isOpen && answer) openAnswers.push({ nickname: player.nickname, text: answer, correct: isCorrect });
+      if (!isOpen && answer != null) answerCounts[answer] += 1;
     }
 
     const sorted = leaderboardOf(room);
@@ -158,6 +170,9 @@ export function registerGame(io, { gamesDir, lanIp, port, ...overrides }) {
       type: question.type,
       correctIndex: isOpen ? undefined : question.correctIndex,
       correctAnswer: isOpen ? question.correctAnswer : undefined,
+      correctNicknames,
+      answerCounts,
+      openAnswers,
       playerScores: sorted,
       roundOver,
       roundNumber: roundOver ? roundPosition + 1 : 0,
@@ -307,6 +322,9 @@ export function registerGame(io, { gamesDir, lanIp, port, ...overrides }) {
         currentTimer: null,
         lastResults: null,
         roundLeaderboardShown: false,
+        packId: null,
+        theme: null,
+        title: null,
         lastActivity: Date.now(),
       };
       rooms.set(code, room);
@@ -347,7 +365,13 @@ export function registerGame(io, { gamesDir, lanIp, port, ...overrides }) {
       socket.data.roomCode = room.code;
       socket.data.role = 'player';
       socket.data.playerId = player.id;
-      socket.emit(EV.JOIN_SUCCESS, { code: room.code, nickname: name, token: player.token });
+      socket.emit(EV.JOIN_SUCCESS, {
+        code: room.code,
+        nickname: name,
+        token: player.token,
+        theme: room.theme,
+        title: room.title,
+      });
       io.to(room.code).emit(EV.PLAYER_JOINED, { players: publicPlayers(room) });
     });
 
@@ -403,10 +427,34 @@ export function registerGame(io, { gamesDir, lanIp, port, ...overrides }) {
       if (room) destroyRoom(room, { notify: room.state !== GAME_STATES.GAME_OVER });
     });
 
+    // Оформление пака применяется сразу: телефоны в лобби перекрашиваются вместе с экраном ведущего
+    on(EV.SELECT_PACK, ({ packId }) => {
+      const room = findRoomOfHost(socket);
+      if (!room || room.state !== GAME_STATES.LOBBY) return;
+      let data = null;
+      try {
+        data = packId ? readPack(gamesDir, packId) : null;
+      } catch (err) {
+        console.error(err.message);
+      }
+      room.packId = data ? String(packId) : null;
+      room.theme = sanitizeTheme(data?.theme) ?? null;
+      room.title = typeof data?.title === 'string' ? data.title : null;
+      if (packId && !data) socket.emit(EV.PACK_LOAD_ERROR, { message: 'Пак не загружен' });
+      io.to(room.code).emit(EV.ROOM_THEME, { theme: room.theme, title: room.title });
+    });
+
+    // Телефон узнаёт оформление игры по коду ещё до входа в комнату
+    on(EV.PEEK_ROOM, ({ code }) => {
+      const room = getRoom(code);
+      if (!room) return countFailedJoin(socket);
+      socket.emit(EV.ROOM_THEME, { theme: room.theme, title: room.title });
+    });
+
     on(EV.START_GAME, ({ packId }) => {
       const room = findRoomOfHost(socket);
       if (!room || room.state !== GAME_STATES.LOBBY) return;
-      Object.assign(room, loadQuestions(socket, packId));
+      Object.assign(room, loadQuestions(socket, packId ?? room.packId));
       room.scores = new Map();
       io.to(room.code).emit(EV.GAME_STARTED);
       startQuestion(room, 0);

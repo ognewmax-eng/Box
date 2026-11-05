@@ -120,3 +120,62 @@ describe('HTTP API', () => {
     assert.equal(status, 429);
   });
 });
+
+describe('оформление пака', () => {
+  let server;
+  const headers = { 'Content-Type': 'application/json', 'X-Admin-Password': ADMIN_PASSWORD };
+  const question = { type: 'open', question: 'Q', correctAnswer: 'A' };
+  before(async () => { server = await startTestServer(); });
+  after(() => server.stop());
+
+  async function saveTheme(id, theme) {
+    const res = await fetch(`${server.url}/api/packs`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ id, title: 'T', theme, rounds: [{ questions: [question] }] }),
+    });
+    assert.equal(res.status, 200);
+    return JSON.parse(fs.readFileSync(join(server.appRoot, 'games', `${id}.json`), 'utf-8')).theme;
+  }
+
+  it('сохраняет настройки и показывает их в публичном списке без ответов', async () => {
+    const theme = {
+      preset: 'tundra',
+      colors: { bg: '#102030' },
+      answers: ['#111111', '#222222', '#333333', '#444444'],
+      fonts: { display: 'oswald' },
+      tile: 'flat',
+      texts: { pointsLabel: 'Олени' },
+      options: { showAnswerCounts: false },
+      logo: 'themed/logo.png',
+      backgroundDim: 40,
+    };
+    assert.deepEqual(await saveTheme('themed', theme), theme);
+    const packs = await (await fetch(`${server.url}/api/packs`)).json();
+    const listed = packs.find((pack) => pack.id === 'themed');
+    assert.deepEqual(listed.theme, theme);
+    assert.equal(listed.rounds, undefined);
+  });
+
+  it('отбрасывает опасные и неизвестные значения', async () => {
+    const saved = await saveTheme('evil', {
+      preset: '../hack',
+      colors: { bg: 'red;} body{display:none', text: '#FFFFFF', extra: '#000000' },
+      answers: ['#111111'],
+      fonts: { display: "x'; url(evil)" },
+      tile: 'javascript',
+      pattern: 'url(x)',
+      logo: 'javascript:alert(1)',
+      backgroundImage: '../../secret.png',
+      backgroundDim: 900,
+      texts: { lobbyHint: 'ok', other: 'нет' },
+      options: { showAnswerCounts: 'да' },
+      unknown: 1,
+    });
+    assert.deepEqual(saved, { colors: { text: '#FFFFFF' }, backgroundDim: 90, texts: { lobbyHint: 'ok' } });
+  });
+
+  it('пак без настроек сохраняется без темы', async () => {
+    assert.equal(await saveTheme('plain', { colors: {}, texts: { lobbyHint: '   ' } }), undefined);
+  });
+});

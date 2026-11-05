@@ -1,455 +1,307 @@
-import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
-import { ANSWER_LETTERS } from '../constants';
+import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Plus } from 'lucide-react';
+import ThemeStage from '../theme/ThemeStage';
+import QuestionsEditor, { emptyQuestion, emptyRound } from '../admin/QuestionsEditor';
+import ThemeEditor from '../admin/ThemeEditor';
 
-const LETTERS = ANSWER_LETTERS;
 const PASSWORD_KEY = 'box.adminPassword';
-const MAX_ROUNDS = 10;
-const MAX_QUESTIONS_PER_ROUND = 10;
-const MAX_CHOICE_OPTIONS = 10;
+const ANSWER_TIMES = [10, 15, 20, 25, 30, 40, 50, 60];
+// Админка всегда в спокойном оформлении: цвета игры видны только в превью
+const TOOL_THEME = { preset: 'clean' };
 
 const normalizePackId = (id) => id.trim().toLowerCase().replace(/\s+/g, '-');
 
-const emptyQuestion = (type = 'choice') => ({
-  type,
-  question: '',
-  options: type === 'choice' ? ['', '', '', ''] : undefined,
-  correctIndex: type === 'choice' ? 0 : undefined,
-  correctAnswer: type === 'open' ? '' : undefined,
-  image: '',
-  video: '',
-  audio: '',
+const newForm = () => ({
+  id: `game-${Date.now().toString(36)}`,
+  title: '',
+  answerTimeSec: 15,
+  theme: null,
+  rounds: [emptyRound()],
 });
 
+function toFormQuestion(q) {
+  return {
+    ...emptyQuestion(q.type === 'open' ? 'open' : 'choice'),
+    question: q.question ?? '',
+    options: q.options?.length ? q.options.slice(0, 10) : ['', '', '', ''],
+    correctIndex: q.correctIndex ?? 0,
+    correctAnswer: q.correctAnswer ?? '',
+    image: q.image ?? '',
+    video: q.video ?? '',
+    audio: q.audio ?? '',
+  };
+}
+
+function packToForm(data) {
+  const source = data.rounds?.length ? data.rounds : [{ timerStart: 'auto', questions: data.questions ?? [] }];
+  const rounds = source.map((round) => ({
+    timerStart: round.timerStart === 'manual' || round.timerStart === 'on_host' ? 'manual' : 'auto',
+    roundTitle: round.roundTitle ?? '',
+    questions: (round.questions ?? []).map(toFormQuestion),
+  }));
+  return {
+    id: data.id,
+    title: data.title ?? '',
+    answerTimeSec: Math.min(60, Math.max(10, Number(data.answerTimeSec) || 15)),
+    theme: data.theme ?? null,
+    rounds: rounds.length ? rounds : [emptyRound()],
+  };
+}
+
+function LoginForm({ message, onSubmit }) {
+  const [value, setValue] = useState('');
+  return (
+    <form
+      className="mx-auto flex h-full max-w-sm flex-col justify-center gap-4 p-6"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit(value);
+      }}
+    >
+      <h1 className="font-display-t text-2xl">Настройка игр</h1>
+      <label className="font-bold">
+        Пароль
+        <input type="password" autoFocus value={value} onChange={(e) => setValue(e.target.value)} className="field mt-1 font-normal" />
+      </label>
+      <p className="text-sm" style={{ color: 'var(--t-muted)' }}>Он показан в окне сервера при запуске и хранится в файле .admin-password.</p>
+      {message && <p role="alert" className="font-bold" style={{ color: 'var(--t-bad)' }}>{message}</p>}
+      <button type="submit" disabled={!value} className="btn w-full">Войти</button>
+    </form>
+  );
+}
+
 export default function Admin() {
+  const [password, setPassword] = useState(() => sessionStorage.getItem(PASSWORD_KEY) || '');
+  const [authorized, setAuthorized] = useState(false);
   const [packs, setPacks] = useState([]);
-  const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({ id: '', title: '', answerTimeSec: 15, rounds: [{ questions: [emptyQuestion()], timerStart: 'auto' }] });
+  const [form, setForm] = useState(newForm);
+  const [isExisting, setIsExisting] = useState(false);
+  const [tab, setTab] = useState('questions');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
-  const [password, setPassword] = useState(() => sessionStorage.getItem(PASSWORD_KEY) || '');
-  const [passwordInput, setPasswordInput] = useState('');
-  const [authorized, setAuthorized] = useState(false);
 
-  const logout = (reason) => {
+  const logout = useCallback((reason) => {
     sessionStorage.removeItem(PASSWORD_KEY);
     setPassword('');
     setAuthorized(false);
     setMessage(reason);
-  };
+  }, []);
 
-  const adminFetch = async (url, options = {}) => {
-    const res = await fetch(url, {
-      ...options,
-      headers: { ...options.headers, 'X-Admin-Password': password },
-    });
+  const adminFetch = useCallback(async (url, options = {}) => {
+    const res = await fetch(url, { ...options, headers: { ...options.headers, 'X-Admin-Password': password } });
     if (res.status === 401) {
       logout('Неверный пароль');
       throw new Error('Неверный пароль');
     }
     return res;
-  };
+  }, [password, logout]);
 
   useEffect(() => {
     if (!password) return;
     adminFetch('/api/admin/check')
       .then((res) => {
-        if (res.status === 429) {
-          logout('Слишком много попыток, подождите минуту');
-          return;
-        }
+        if (res.status === 429) return logout('Слишком много попыток, подождите минуту');
         if (!res.ok) throw new Error();
         sessionStorage.setItem(PASSWORD_KEY, password);
         setAuthorized(true);
         setMessage('');
+        return undefined;
       })
       .catch(() => {});
-  }, [password]);
+  }, [password, adminFetch, logout]);
 
-  const loadPacks = () => {
+  const loadPacks = useCallback(() => {
     fetch('/api/packs')
       .then((r) => r.json())
       .then(setPacks)
       .catch(() => setPacks([]));
-  };
+  }, []);
 
   useEffect(() => {
     if (authorized) loadPacks();
-  }, [authorized]);
+  }, [authorized, loadPacks]);
 
-  const addRound = () => {
-    if (form.rounds.length >= MAX_ROUNDS) return;
-    setForm((f) => ({ ...f, rounds: [...f.rounds, { questions: [emptyQuestion()], timerStart: 'auto' }] }));
-  };
-
-  const updateRound = (roundIndex, field, value) => {
-    setForm((f) => ({
-      ...f,
-      rounds: f.rounds.map((r, i) => (i !== roundIndex ? r : { ...r, [field]: value })),
-    }));
-  };
-
-  const addQuestion = (roundIndex) => {
-    setForm((f) => {
-      const round = f.rounds[roundIndex];
-      if (round.questions.length >= MAX_QUESTIONS_PER_ROUND) return f;
-      return {
-        ...f,
-        rounds: f.rounds.map((r, i) =>
-          i === roundIndex ? { ...r, questions: [...r.questions, emptyQuestion()] } : r
-        ),
-      };
-    });
-  };
-
-  const updateQuestion = (roundIndex, questionIndex, field, value) => {
-    setForm((f) => ({
-      ...f,
-      rounds: f.rounds.map((r, ri) =>
-        ri !== roundIndex
-          ? r
-          : {
-              ...r,
-              questions: r.questions.map((q, qi) => {
-                if (qi !== questionIndex) return q;
-                if (field === 'options' && Array.isArray(value)) return { ...q, options: value };
-                return { ...q, [field]: value };
-              }),
-            }
-      ),
-    }));
-  };
-
-  const setQuestionType = (roundIndex, questionIndex, type) => {
-    setForm((f) => ({
-      ...f,
-      rounds: f.rounds.map((r, ri) =>
-        ri !== roundIndex
-          ? r
-          : {
-              ...r,
-              questions: r.questions.map((q, qi) => {
-                if (qi !== questionIndex) return q;
-                const text = q.question || '';
-                const media = { image: q.image ?? '', video: q.video ?? '', audio: q.audio ?? '' };
-                if (type === 'open') return { type: 'open', question: text, correctAnswer: '', ...media };
-                return { type: 'choice', question: text, options: ['', '', '', ''], correctIndex: 0, ...media };
-              }),
-            }
-      ),
-    }));
-  };
-
-  const removeQuestion = (roundIndex, questionIndex) => {
-    setForm((f) => ({
-      ...f,
-      rounds: f.rounds.map((r, i) =>
-        i === roundIndex
-          ? { ...r, questions: r.questions.filter((_, qi) => qi !== questionIndex) }
-          : r
-      ),
-    }));
-  };
-
-  const removeRound = (roundIndex) => {
-    if (form.rounds.length <= 1) return;
-    setForm((f) => ({ ...f, rounds: f.rounds.filter((_, i) => i !== roundIndex) }));
-  };
-
-  const uploadMedia = (roundIndex, questionIndex, field, e) => {
-    const file = e.target?.files?.[0];
-    if (!file || !form.id?.trim()) return;
+  const openPack = async (pack) => {
     setMessage('');
-    const fd = new FormData();
-    fd.append('file', file);
-    adminFetch(`/api/packs/${encodeURIComponent(normalizePackId(form.id))}/media`, { method: 'POST', body: fd })
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.path) updateQuestion(roundIndex, questionIndex, field, data.path);
-        if (data.error) setMessage(data.error);
-      })
-      .catch(() => setMessage('Ошибка загрузки'));
-    e.target.value = '';
+    try {
+      const res = await adminFetch(`/api/packs/${encodeURIComponent(pack.id)}`);
+      if (!res.ok) throw new Error(res.status === 404 ? 'Игра не найдена' : 'Не удалось открыть игру');
+      setForm(packToForm(await res.json()));
+      setIsExisting(true);
+    } catch (err) {
+      setMessage(err.message);
+    }
   };
 
-  const savePack = async (e) => {
-    e?.preventDefault();
-    if (!form.id.trim() || !form.title.trim()) {
-      setMessage('Заполните ID и название');
+  const startNew = () => {
+    setForm(newForm());
+    setIsExisting(false);
+    setTab('questions');
+    setMessage('');
+  };
+
+  const uploadFile = async (file, onDone) => {
+    setMessage('');
+    if (!form.id.trim()) {
+      setMessage('Сначала укажите адрес игры');
       return;
     }
-    const id = normalizePackId(form.id);
-    // Проверку вариантов и индекса правильного ответа делает сервер: ошибку он вернёт текстом
+    const body = new FormData();
+    body.append('file', file);
+    try {
+      const res = await adminFetch(`/api/packs/${encodeURIComponent(normalizePackId(form.id))}/media`, { method: 'POST', body });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      onDone(data.path);
+    } catch (err) {
+      setMessage(err.message || 'Файл не загрузился');
+    }
+  };
+
+  const save = async () => {
+    if (!form.title.trim()) {
+      setMessage('Укажите название игры');
+      return;
+    }
     const rounds = form.rounds
-      .map((r) => ({
-        timerStart: r.timerStart === 'manual' ? 'manual' : 'auto',
-        roundTitle: r.roundTitle?.trim() || undefined,
-        questions: r.questions.filter((q) => q.question.trim()),
-      }))
-      .filter((r) => r.questions.length > 0);
+      .map((round) => ({ ...round, questions: round.questions.filter((q) => q.question.trim()) }))
+      .filter((round) => round.questions.length > 0);
     if (rounds.length === 0) {
-      setMessage('Добавьте хотя бы один вопрос в раунды');
+      setMessage('Добавьте хотя бы один вопрос');
+      setTab('questions');
       return;
     }
     setSaving(true);
     setMessage('');
     try {
+      const id = normalizePackId(form.id);
       const res = await adminFetch('/api/packs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, title: form.title.trim(), answerTimeSec: form.answerTimeSec, rounds }),
+        body: JSON.stringify({ ...form, id, rounds }),
       });
-      const text = await res.text();
-      let data;
-      try {
-        data = text ? JSON.parse(text) : {};
-      } catch (_) {
-        throw new Error('Сервер вернул не JSON. Убедитесь, что запущен сервер (npm run dev:server или npm run tunnel).');
-      }
+      const data = await res.json();
       if (data.error) throw new Error(data.error);
-      setMessage('Пак сохранён!');
-      setForm({ id: '', title: '', answerTimeSec: 15, rounds: [{ questions: [emptyQuestion()], timerStart: 'auto' }] });
-      setEditing(null);
+      setForm((f) => ({ ...f, id: data.id }));
+      setIsExisting(true);
+      setMessage('Игра сохранена');
       loadPacks();
     } catch (err) {
-      setMessage(err.message || 'Ошибка сохранения');
+      setMessage(err.message || 'Игра не сохранилась');
     } finally {
       setSaving(false);
     }
   };
 
-  const startEdit = (pack) => {
-    if (!pack?.id) return;
-    const id = encodeURIComponent(pack.id);
-    adminFetch(`/api/packs/${id}`)
-      .then((r) => {
-        if (!r.ok) {
-          setMessage(r.status === 404 ? 'Пак не найден' : 'Не удалось загрузить пак');
-          return null;
-        }
-        return r.json();
-      })
-      .then((data) => {
-        if (!data) return;
-        let rounds = [];
-        if (Array.isArray(data.rounds) && data.rounds.length > 0) {
-          rounds = data.rounds.map((r) => ({
-            timerStart: (r.timerStart === 'manual' || r.timerStart === 'on_host') ? 'manual' : 'auto',
-            roundTitle: r.roundTitle ?? '',
-            questions: (r.questions || []).map((q) => ({
-              type: q.type === 'open' ? 'open' : 'choice',
-              question: q.question || '',
-              options: (q.options && q.options.length) ? [...q.options].slice(0, MAX_CHOICE_OPTIONS) : ['', '', '', ''],
-              correctIndex: q.correctIndex ?? 0,
-              correctAnswer: q.correctAnswer ?? '',
-              image: q.image ?? '',
-              video: q.video ?? '',
-              audio: q.audio ?? '',
-            })),
-          }));
-        } else if (Array.isArray(data.questions) && data.questions.length > 0) {
-          rounds = [{
-            timerStart: 'auto',
-            questions: data.questions.map((q) => ({
-              type: q.type === 'open' ? 'open' : 'choice',
-              question: q.question || '',
-              options: (q.options && q.options.length) ? [...q.options].slice(0, MAX_CHOICE_OPTIONS) : ['', '', '', ''],
-              correctIndex: q.correctIndex ?? 0,
-              correctAnswer: q.correctAnswer ?? '',
-              image: q.image ?? '',
-              video: q.video ?? '',
-              audio: q.audio ?? '',
-            })),
-          }];
-        }
-        if (rounds.length === 0) rounds = [{ questions: [emptyQuestion()], timerStart: 'auto' }];
-        const answerTimeSec = Math.min(60, Math.max(10, Number(data.answerTimeSec) || 15));
-        setForm({ id: data.id, title: data.title || '', answerTimeSec, rounds });
-        setEditing(pack.id);
-        setMessage('');
-      })
-      .catch(() => setMessage('Не удалось загрузить пак'));
-  };
-
-  const totalQuestions = form.rounds.reduce((acc, r) => acc + r.questions.length, 0);
-
   if (!authorized) {
     return (
-      <div className="min-h-screen bg-[#0a0a0f] text-white flex items-center justify-center p-6">
-        <form
-          className="w-full max-w-sm rounded-3xl bg-white/5 border border-white/10 p-8 space-y-5"
-          onSubmit={(e) => {
-            e.preventDefault();
+      <ThemeStage config={TOOL_THEME} page>
+        <LoginForm
+          message={message}
+          onSubmit={(value) => {
             setMessage('');
-            setPassword(passwordInput);
+            setPassword(value);
           }}
-        >
-          <h1 className="text-2xl font-black">BOX <span className="text-[#a855f7]">PARTY</span> — Админка</h1>
-          <div>
-            <label htmlFor="admin-password" className="block text-gray-400 text-sm mb-2">Пароль</label>
-            <input
-              id="admin-password"
-              type="password"
-              autoFocus
-              value={passwordInput}
-              onChange={(e) => setPasswordInput(e.target.value)}
-              className="w-full rounded-xl bg-white/5 border-2 border-white/10 px-4 py-3 text-white focus:border-[#a855f7] outline-none"
-            />
-            <p className="text-gray-500 text-xs mt-2">Пароль показан в окне сервера при запуске и хранится в файле .admin-password.</p>
-          </div>
-          {message && <p className="text-[#ef4444] text-sm">{message}</p>}
-          <button type="submit" disabled={!passwordInput} className="w-full py-3 rounded-2xl bg-gradient-to-r from-[#a855f7] to-[#7c3aed] font-black disabled:opacity-50">Войти</button>
-        </form>
-      </div>
+        />
+      </ThemeStage>
     );
   }
 
+  const firstQuestion = form.rounds[0]?.questions[0];
+
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white p-6 md:p-10 relative overflow-hidden">
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-[#a855f7] rounded-full blur-[140px] opacity-10" />
-        <div className="absolute bottom-0 left-0 w-96 h-96 bg-[#22d3ee] rounded-full blur-[140px] opacity-10" />
-      </div>
-      <div className="relative z-10">
-        <h1 className="text-4xl font-black text-white mb-2">
-          BOX <span className="text-[#a855f7]">PARTY</span> — Админка
-        </h1>
-        <p className="text-gray-400 mb-8">Пак: до {MAX_ROUNDS} раундов, до {MAX_QUESTIONS_PER_ROUND} вопросов в раунде. Тип: выбор ответа или открытый (регистр, ё/е и знаки препинания не важны).</p>
+    <ThemeStage config={TOOL_THEME} page>
+      <div className="grid h-full grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[15rem_minmax(0,1fr)] lg:grid-rows-1">
+        <nav aria-label="Игры" className="flex flex-col gap-3 overflow-y-auto p-4 max-lg:max-h-44" style={{ background: 'var(--t-surface)' }}>
+          <Link to="/" className="font-display-t text-lg">Box Party</Link>
+          <button type="button" onClick={startNew} className="btn justify-start py-2 text-sm"><Plus className="h-4 w-4" />Новая игра</button>
+          <ul className="flex flex-col gap-1">
+            {packs.map((pack) => (
+              <li key={pack.id}>
+                <button
+                  type="button"
+                  onClick={() => openPack(pack)}
+                  aria-current={pack.id === form.id ? 'true' : undefined}
+                  className="w-full px-2 py-2 text-left text-sm"
+                  style={{
+                    borderRadius: '0.4rem',
+                    background: pack.id === form.id ? 'var(--t-bg)' : 'transparent',
+                    fontWeight: pack.id === form.id ? 700 : 400,
+                  }}
+                >
+                  {pack.title}
+                  <span className="block text-xs" style={{ color: 'var(--t-muted)' }}>Вопросов: {pack.questionsCount}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          {packs.length === 0 && <p className="text-sm" style={{ color: 'var(--t-muted)' }}>Игр пока нет. Создайте первую.</p>}
+        </nav>
 
-        {message && (
-          <motion.p className="mb-6 p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            {message}
-          </motion.p>
-        )}
+        <main className="flex min-h-0 flex-col">
+          <header className="flex flex-wrap items-end gap-4 border-b p-4" style={{ borderColor: 'var(--t-line)' }}>
+            <label className="min-w-[14rem] flex-1 text-sm font-bold">
+              Название игры
+              <input
+                type="text"
+                value={form.title}
+                maxLength={200}
+                onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+                placeholder="Например: Сокровища Ямала"
+                className="field mt-1 text-base font-normal"
+              />
+            </label>
+            <label className="w-44 text-sm font-bold">
+              Адрес игры (латиница)
+              <input
+                type="text"
+                value={form.id}
+                disabled={isExisting}
+                onChange={(e) => setForm((f) => ({ ...f, id: e.target.value }))}
+                className="field mt-1 font-normal disabled:opacity-60"
+              />
+            </label>
+            <button type="button" onClick={save} disabled={saving} className="btn">{saving ? 'Сохраняем…' : 'Сохранить игру'}</button>
+          </header>
 
-        <div className="grid lg:grid-cols-2 gap-10">
-          <div>
-            <h2 className="text-xl font-bold text-[#a855f7] mb-4">Паки</h2>
-            <ul className="space-y-3">
-              {packs.map((pack) => (
-                <li key={pack.id} className="flex justify-between items-center rounded-2xl bg-white/5 border border-white/10 px-4 py-3">
-                  <div>
-                    <span className="font-bold text-white">{pack.title}</span>
-                    <span className="text-gray-500 text-sm ml-2">({pack.questionsCount ?? pack.questions?.length ?? 0} вопр.)</span>
-                  </div>
-                  <motion.button onClick={() => startEdit(pack)} className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#a855f7] to-[#7c3aed] text-white text-sm font-bold hover:shadow-nexus-purple" whileTap={{ scale: 0.98 }}>
-                    Редактировать
-                  </motion.button>
-                </li>
-              ))}
-            </ul>
-            {packs.length === 0 && <p className="text-gray-500">Нет паков.</p>}
+          <div role="tablist" aria-label="Разделы" className="flex gap-1 px-4 pt-3">
+            {[['questions', 'Вопросы'], ['theme', 'Оформление']].map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={tab === id}
+                onClick={() => setTab(id)}
+                className="px-4 py-2 font-bold"
+                style={{
+                  borderRadius: '0.4rem',
+                  background: tab === id ? 'var(--t-text)' : 'transparent',
+                  color: tab === id ? 'var(--t-bg)' : 'var(--t-text)',
+                }}
+              >
+                {label}
+              </button>
+            ))}
           </div>
 
-          <div className="rounded-3xl bg-white/5 border border-white/10 backdrop-blur-xl p-8">
-            <h2 className="text-xl font-bold text-[#a855f7] mb-6">{editing ? 'Редактировать пак' : 'Новый пак'}</h2>
-            <form onSubmit={savePack} className="space-y-6">
-              <div>
-                <label className="block text-gray-400 text-sm mb-2">ID (латиница)</label>
-                <input type="text" value={form.id} onChange={(e) => setForm((f) => ({ ...f, id: e.target.value }))} placeholder="my-pack" className="w-full rounded-xl bg-white/5 border-2 border-white/10 px-4 py-3 text-white placeholder-gray-500 focus:border-[#a855f7] outline-none transition-colors" disabled={!!editing} />
-              </div>
-              <div>
-                <label className="block text-gray-400 text-sm mb-2">Название пака</label>
-                <input type="text" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="Название" className="w-full rounded-xl bg-white/5 border-2 border-white/10 px-4 py-3 text-white placeholder-gray-500 focus:border-[#a855f7] outline-none transition-colors" />
-              </div>
-              <div>
-                <label className="block text-gray-400 text-sm mb-2">Время на ответ (сек)</label>
-                <select value={form.answerTimeSec} onChange={(e) => setForm((f) => ({ ...f, answerTimeSec: Number(e.target.value) }))} className="w-full rounded-xl bg-white/5 border-2 border-white/10 px-4 py-3 text-white focus:border-[#a855f7] outline-none">
-                  {[10, 15, 20, 25, 30, 40, 50, 60].map((n) => (
-                    <option key={n} value={n} className="bg-[#1a1a2e]">{n} сек</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <div className="flex justify-between items-center mb-3">
-                  <span className="text-gray-400 text-sm">Раунды и вопросы</span>
-                  <motion.button type="button" onClick={addRound} disabled={form.rounds.length >= MAX_ROUNDS} className="text-[#22d3ee] hover:text-[#a855f7] text-sm font-bold disabled:opacity-50" whileTap={{ scale: 0.98 }}>+ Раунд</motion.button>
-                </div>
-                <div className="space-y-8 max-h-[55vh] overflow-y-auto pr-2">
-                  {form.rounds.map((round, ri) => (
-                    <div key={ri} className="rounded-2xl bg-white/5 p-4 border border-white/10">
-                      <div className="flex flex-wrap justify-between items-center gap-2 mb-3">
-                        <div className="flex items-center gap-2 flex-1 min-w-[12rem]">
-                          <span className="text-[#a855f7] font-bold whitespace-nowrap">Раунд {ri + 1}</span>
-                          <input type="text" value={round.roundTitle ?? ''} onChange={(e) => updateRound(ri, 'roundTitle', e.target.value)} placeholder="Название (необязательно)" className="flex-1 min-w-0 rounded-lg bg-white/5 border border-white/10 px-2 py-1 text-white text-sm" />
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <label className="text-gray-400 text-sm flex items-center gap-1">
-                            Таймер:
-                            <select value={round.timerStart ?? 'auto'} onChange={(e) => updateRound(ri, 'timerStart', e.target.value)} className="rounded-lg bg-white/5 border border-white/10 px-2 py-1 text-white text-sm">
-                              <option value="auto" className="bg-[#1a1a2e]">сразу</option>
-                              <option value="manual" className="bg-[#1a1a2e]">по нажатию ведущего</option>
-                            </select>
-                          </label>
-                          <button type="button" onClick={() => addQuestion(ri)} disabled={round.questions.length >= MAX_QUESTIONS_PER_ROUND} className="text-gray-400 hover:text-[#22d3ee] text-sm disabled:opacity-50">+ Вопрос</button>
-                          {form.rounds.length > 1 && <button type="button" onClick={() => removeRound(ri)} className="text-gray-500 hover:text-[#ef4444] text-sm">Удалить раунд</button>}
-                        </div>
-                      </div>
-                      {round.questions.map((q, qi) => (
-                        <div key={qi} className="rounded-xl bg-white/5 p-3 border border-white/10 mb-3">
-                          <div className="flex justify-between items-center mb-2">
-                            <span className="text-gray-400 text-sm">Вопрос {qi + 1}</span>
-                            <div className="flex gap-2 items-center">
-                              <select value={q.type} onChange={(e) => setQuestionType(ri, qi, e.target.value)} className="rounded-lg bg-white/5 border border-white/10 px-2 py-1 text-white text-sm">
-                                <option value="choice" className="bg-[#1a1a2e]">Выбор</option>
-                                <option value="open" className="bg-[#1a1a2e]">Открытый</option>
-                              </select>
-                              <button type="button" onClick={() => removeQuestion(ri, qi)} className="text-gray-500 hover:text-[#ef4444] text-sm">Удалить</button>
-                            </div>
-                          </div>
-                          <input type="text" value={q.question} onChange={(e) => updateQuestion(ri, qi, 'question', e.target.value)} placeholder="Текст вопроса?" className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white text-sm mb-2 focus:border-[#a855f7] outline-none" />
-                          <div className="mb-3 rounded-lg bg-white/5 p-3 border border-[#a855f7]/30">
-                            <p className="text-[#22d3ee] font-bold text-sm mb-2">Медиа (фото, видео, аудио)</p>
-                            <p className="text-gray-400 text-xs mb-2">URL или загрузите файл после сохранения пака</p>
-                            {['image', 'video', 'audio'].map((mediaType) => (
-                              <div key={mediaType} className="flex flex-wrap items-center gap-2 mb-2">
-                                <span className="text-[#22d3ee] text-xs w-12 shrink-0">{mediaType === 'image' ? 'Фото' : mediaType === 'video' ? 'Видео' : 'Аудио'}:</span>
-                                <input type="text" value={q[mediaType] ?? ''} onChange={(e) => updateQuestion(ri, qi, mediaType, e.target.value)} placeholder="URL или нажмите «Добавить»" className="flex-1 min-w-0 rounded bg-white/5 border border-white/10 px-2 py-1.5 text-white text-xs" />
-                                {form.id?.trim() ? (
-                                  <>
-                                    <input type="file" id={`${ri}-${qi}-${mediaType}`} accept={mediaType === 'image' ? 'image/*' : mediaType === 'video' ? 'video/*' : 'audio/*'} className="hidden" onChange={(e) => uploadMedia(ri, qi, mediaType, e)} />
-                                    <label htmlFor={`${ri}-${qi}-${mediaType}`} className="cursor-pointer px-3 py-1.5 rounded-lg bg-gradient-to-r from-[#a855f7] to-[#7c3aed] text-white text-xs font-bold whitespace-nowrap">
-                                      Добавить
-                                    </label>
-                                  </>
-                                ) : (
-                                  <span className="text-gray-500 text-xs">Сохраните пак, чтобы загружать файлы</span>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                          {q.type === 'open' ? (
-                            <input type="text" value={q.correctAnswer ?? ''} onChange={(e) => updateQuestion(ri, qi, 'correctAnswer', e.target.value)} placeholder="Правильный ответ (регистр, ё/е и знаки не важны)" className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white text-sm focus:border-[#a855f7] outline-none" />
-                          ) : (
-                            <>
-                              {(() => { const base = q.options || ['', '', '', '']; const opts = [...base.slice(0, MAX_CHOICE_OPTIONS)]; while (opts.length < MAX_CHOICE_OPTIONS) opts.push(''); return opts; })().map((opt, oi) => (
-                                <div key={oi} className="flex items-center gap-2 mb-1">
-                                  <span className="text-[#22d3ee] w-5 font-bold">{LETTERS[oi] ?? oi + 1}.</span>
-                                  <input type="text" value={opt} onChange={(e) => { const base = q.options || ['', '', '', '']; const opts = [...base.slice(0, MAX_CHOICE_OPTIONS)]; while (opts.length <= oi) opts.push(''); opts[oi] = e.target.value; updateQuestion(ri, qi, 'options', opts.slice(0, MAX_CHOICE_OPTIONS)); }} placeholder={`Вариант ${oi + 1}`} className="flex-1 rounded-lg bg-white/5 border border-white/10 px-2 py-1 text-white text-sm" />
-                                </div>
-                              ))}
-                              <select value={Math.min(Math.max(0, q.correctIndex ?? 0), Math.max(0, (q.options || []).length - 1))} onChange={(e) => updateQuestion(ri, qi, 'correctIndex', parseInt(e.target.value, 10))} className="mt-2 rounded-lg bg-white/5 border border-white/10 px-2 py-1 text-white text-sm">
-                                {((q.options || ['', '', '', '']).slice(0, MAX_CHOICE_OPTIONS).map((_, i) => i)).map((i) => <option key={i} value={i} className="bg-[#1a1a2e]">Правильный: {LETTERS[i] ?? i + 1}</option>)}
-                              </select>
-                            </>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-                <p className="text-gray-500 text-sm mt-2">Всего вопросов: {totalQuestions}</p>
-              </div>
-              <div className="flex gap-4">
-                <motion.button type="submit" disabled={saving} className="px-8 py-4 rounded-2xl bg-gradient-to-r from-[#a855f7] to-[#7c3aed] text-white font-black disabled:opacity-50 hover:shadow-nexus-purple" whileTap={{ scale: 0.98 }}>{saving ? 'Сохранение…' : 'Сохранить пак'}</motion.button>
-                {editing && (
-                  <motion.button type="button" onClick={() => { setEditing(null); setForm({ id: '', title: '', answerTimeSec: 15, rounds: [{ questions: [emptyQuestion()], timerStart: 'auto' }] }); setMessage(''); }} className="px-8 py-4 rounded-2xl bg-white/10 border border-white/10 hover:bg-white/20 font-bold" whileTap={{ scale: 0.98 }}>Отмена</motion.button>
-                )}
-              </div>
-            </form>
+          {message && <p role="status" className="mx-4 mt-3 px-3 py-2 font-bold" style={{ background: 'var(--t-surface)', borderRadius: '0.4rem' }}>{message}</p>}
+
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            {tab === 'questions' ? (
+              <QuestionsEditor form={form} setForm={setForm} onUpload={uploadFile} answerTimes={ANSWER_TIMES} />
+            ) : (
+              <ThemeEditor
+                theme={form.theme}
+                onChange={(theme) => setForm((f) => ({ ...f, theme }))}
+                onUpload={uploadFile}
+                title={form.title}
+                firstQuestion={firstQuestion}
+              />
+            )}
           </div>
-        </div>
+        </main>
       </div>
-    </div>
+    </ThemeStage>
   );
 }

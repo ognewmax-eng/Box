@@ -1,6 +1,7 @@
 import fs from 'fs';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
+import { sanitizeTheme } from './theme.js';
 
 export const MAX_ROUNDS = 10;
 export const MAX_QUESTIONS_PER_ROUND = 10;
@@ -91,7 +92,8 @@ export function buildPackFile(body) {
     };
   });
 
-  return { title, answerTimeSec: clampAnswerTime(body.answerTimeSec), rounds };
+  const theme = sanitizeTheme(body.theme);
+  return { title, answerTimeSec: clampAnswerTime(body.answerTimeSec), ...(theme ? { theme } : {}), rounds };
 }
 
 export function normalizeQuestion(q) {
@@ -167,10 +169,12 @@ export function listPacks(gamesDir) {
   for (const file of fs.readdirSync(gamesDir).filter((f) => f.endsWith('.json'))) {
     try {
       const data = JSON.parse(fs.readFileSync(join(gamesDir, file), 'utf-8'));
+      const theme = sanitizeTheme(data.theme);
       packs.push({
         id: file.replace(/\.json$/i, ''),
         title: data.title,
         questionsCount: loadPackForGame(data).questions.length,
+        ...(theme ? { theme } : {}),
       });
     } catch (err) {
       console.error('Пак не загружен:', file, err.message);
